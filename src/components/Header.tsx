@@ -6,6 +6,7 @@ import { Activity, Clock, RefreshCw, Power, Zap, Search, Sun, Moon } from "lucid
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { useLiveViewers } from "@/hooks/useLiveViewers";
 
 export function Header() {
   const { lastUpdated, autoRefresh, toggleAutoRefresh, fetchData, isLoading } = useMarketStore();
@@ -13,6 +14,7 @@ export function Header() {
   const [countdown, setCountdown] = useState(15);
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
+  const { viewersCount, isConfigured } = useLiveViewers();
 
   useEffect(() => {
     setMounted(true);
@@ -20,8 +22,15 @@ export function Header() {
     return () => clearInterval(timer);
   }, []);
 
+  // Automatically turn off auto-refresh if the market is offline/closed
   useEffect(() => {
-    if (!autoRefresh) {
+    if (mounted && !isMarketOpen() && autoRefresh) {
+      useMarketStore.setState({ autoRefresh: false });
+    }
+  }, [mounted, now, autoRefresh]);
+
+  useEffect(() => {
+    if (!autoRefresh || !isMarketOpen()) {
       setCountdown(15);
       return;
     }
@@ -90,16 +99,33 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Active Viewers Counter */}
+          <div 
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-medium text-xs shadow-sm"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="font-mono font-bold flex items-center gap-1">
+              <span>{mounted ? viewersCount : "---"}</span>
+              <span>Live</span>
+            </span>
+          </div>
+
           <div className="flex items-center gap-2 bg-muted p-1 rounded-xl border border-border">
             <button
               onClick={toggleAutoRefresh}
+              disabled={!isMarketOpen()}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-                autoRefresh ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"
+                autoRefresh ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground",
+                !isMarketOpen() && "opacity-50 cursor-not-allowed hover:text-muted-foreground"
               )}
+              title={!isMarketOpen() ? "Auto-refresh is disabled because the market is closed" : undefined}
             >
               <Power className="h-3 w-3" />
-              {autoRefresh ? `Auto: ${countdown}s` : "Auto Off"}
+              {autoRefresh && isMarketOpen() ? `Auto: ${countdown}s` : "Auto Off"}
             </button>
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

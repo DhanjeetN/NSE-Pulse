@@ -61,6 +61,21 @@ export default function Dashboard() {
             />
           </GlassCard>
         </div>
+
+        {/* Disclaimer Section */}
+        <div className="mt-12 p-5 rounded-2xl border border-border/40 bg-card/40 backdrop-blur-md shadow-sm hover:border-border/60 transition-all duration-300">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="text-left">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground/80 mb-1.5">
+                Disclaimer
+              </h4>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Disclaimer: NSE Pulse is an independent platform created for informational and educational purposes only. The data and insights shared here are sourced from publicly available NSE market information. This does not constitute financial advice, investment recommendations, or trading guidance. Users are solely responsible for their own investment decisions. NSE Pulse and its creators are not liable for any financial losses, risks, or damages arising from the use of this platform.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <footer className="container mx-auto px-6 py-12 border-t border-white/5 text-center">
