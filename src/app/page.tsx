@@ -9,6 +9,7 @@ import { OIAnalyzer } from "@/components/OIAnalyzer";
 import { useMarketStore } from "@/store/useStore";
 import { TrendingUp, TrendingDown, Rocket, AlertCircle } from "lucide-react";
 
+
 export default function Dashboard() {
   const { gainers, losers, oiUnderlyings, oiContracts, fetchData, isLoading, error } = useMarketStore();
 
@@ -19,7 +20,7 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-background text-foreground selection:bg-blue-500/30">
       <Header />
-      
+
       <div className="container mx-auto px-6 py-8">
         <SummaryCards />
 
@@ -31,16 +32,16 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <GlassCard 
-            title="Top Gainers" 
+          <GlassCard
+            title="Top Gainers"
             badge={<TrendingUp className="h-4 w-4 text-emerald-500" />}
             className="h-full"
           >
             <StockTable data={gainers} type="gainer" isLoading={isLoading} />
           </GlassCard>
 
-          <GlassCard 
-            title="Top Losers" 
+          <GlassCard
+            title="Top Losers"
             badge={<TrendingDown className="h-4 w-4 text-rose-500" />}
             className="h-full"
           >
@@ -49,15 +50,15 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 gap-8">
-          <GlassCard 
-            title="NSE OI Spurts Analyzer" 
+          <GlassCard
+            title="NSE OI Spurts Analyzer"
             badge={<Rocket className="h-4 w-4 text-amber-500" />}
             className="min-h-[600px]"
           >
-            <OIAnalyzer 
-              underlyings={oiUnderlyings} 
-              contracts={oiContracts} 
-              isLoading={isLoading} 
+            <OIAnalyzer
+              underlyings={oiUnderlyings}
+              contracts={oiContracts}
+              isLoading={isLoading}
             />
           </GlassCard>
         </div>
