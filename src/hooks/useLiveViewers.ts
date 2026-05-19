@@ -49,6 +49,9 @@ export function useLiveViewers() {
 
     // Fallback simulation if Supabase is not configured
     if (usingSimulation) {
+      console.warn(
+        "⚠️ Supabase is not fully configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY to enable the live viewer counter. Falling back to simulated count."
+      );
       startSimulation();
       return () => {
         isMounted = false;

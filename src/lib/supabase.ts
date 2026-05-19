@@ -15,12 +15,6 @@ export const isSupabaseConfigured: boolean = !!(
   supabaseAnonKey !== "your_supabase_publishable_key"
 );
 
-if (!isSupabaseConfigured) {
-  console.warn(
-    "⚠️ Supabase is not fully configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY to enable the live viewer counter. Falling back to simulated count."
-  );
-}
-
 // Initialize client (always instantiate, but we will check `isSupabaseConfigured` before calling methods to prevent runtime crashes)
 export const supabase = createClient(
   isSupabaseConfigured ? supabaseUrl : "https://placeholder-url.supabase.co",
