@@ -93,25 +93,47 @@ export function useLiveViewers() {
           return;
         }
 
-        // B. Periodically clean up old rows that are older than 5 minutes to prevent table bloat.
-        // This is self-cleaning, very efficient, and keeps the database table tiny.
-        const fiveMinutesAgo = new Date(Date.now() - 300000).toISOString();
-        await supabase
-          .from("active_users")
-          .delete()
-          .lt("last_seen_at", fiveMinutesAgo);
+        // B. Try fetching count via database RPC function (accurate & immune to client-side clock skew)
+        // Note: RPC function also handles the self-cleaning (deletes rows older than 5 minutes)
+        let finalCount = 1;
+        let rpcSuccess = false;
 
-        // C. Fetch the active user count (users active within the last 60 seconds)
-        const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
-        const { count, error: countError } = await supabase
-          .from("active_users")
-          .select("*", { count: "exact", head: true })
-          .gt("last_seen_at", sixtySecondsAgo);
+        try {
+          const { data: rpcCount, error: rpcError } = await supabase.rpc("get_active_users_count");
+          if (!rpcError && rpcCount !== null) {
+            finalCount = rpcCount;
+            rpcSuccess = true;
+          }
+        } catch (rpcErr) {
+          // RPC might not exist yet if database script hasn't run
+          rpcSuccess = false;
+        }
 
-        if (countError) {
-          console.error("Error fetching live count:", countError);
-        } else if (count !== null && isMounted) {
-          setViewersCount(count || 1); // Minimum of 1 (self)
+        // C. Fallback: If RPC is not available, execute client-side cleanup and select query
+        if (!rpcSuccess) {
+          // 1. Client-side self-cleanup
+          const fiveMinutesAgo = new Date(Date.now() - 300000).toISOString();
+          await supabase
+            .from("active_users")
+            .delete()
+            .lt("last_seen_at", fiveMinutesAgo);
+
+          // 2. Client-side fetch
+          const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+          const { count, error: countError } = await supabase
+            .from("active_users")
+            .select("*", { count: "exact", head: true })
+            .gt("last_seen_at", sixtySecondsAgo);
+
+          if (countError) {
+            console.error("Error fetching live count (fallback):", countError);
+          } else if (count !== null) {
+            finalCount = count;
+          }
+        }
+
+        if (isMounted) {
+          setViewersCount(finalCount || 1); // Minimum of 1 (self)
         }
       } catch (err) {
         console.error("Unexpected error in live viewer tracking:", err);

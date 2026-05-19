@@ -36,3 +36,39 @@ CREATE POLICY "Allow public delete"
 ON public.active_users 
 FOR DELETE 
 USING (true);
+
+-- 5. Create trigger to automatically set last_seen_at to database server time (UTC)
+-- This eliminates client clock skew issues where a client's local clock is out of sync.
+CREATE OR REPLACE FUNCTION public.set_last_seen_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.last_seen_at = timezone('utc'::text, now());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE TRIGGER tr_set_last_seen_at
+BEFORE INSERT OR UPDATE ON public.active_users
+FOR EACH ROW
+EXECUTE FUNCTION public.set_last_seen_at();
+
+-- 6. Create RPC function to get active users count and self-clean old data
+-- This is executed on the server, avoiding network roundtrips for deletes and client clock issues.
+CREATE OR REPLACE FUNCTION public.get_active_users_count()
+RETURNS integer AS $$
+DECLARE
+    active_count integer;
+BEGIN
+    -- Self-cleaning: Delete rows older than 5 minutes
+    DELETE FROM public.active_users 
+    WHERE last_seen_at < (timezone('utc'::text, now()) - INTERVAL '5 minutes');
+
+    -- Count active users (active in the last 60 seconds)
+    SELECT count(*)::integer INTO active_count
+    FROM public.active_users
+    WHERE last_seen_at > (timezone('utc'::text, now()) - INTERVAL '60 seconds');
+
+    RETURN COALESCE(active_count, 1);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
