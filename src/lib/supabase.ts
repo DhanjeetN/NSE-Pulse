@@ -12,7 +12,11 @@ export const isSupabaseConfigured: boolean = !!(
   supabaseAnonKey && 
   supabaseUrl !== "your_supabase_project_url" && 
   supabaseAnonKey !== "your_supabase_anon_key" &&
-  supabaseAnonKey !== "your_supabase_publishable_key"
+  supabaseAnonKey !== "your_supabase_publishable_key" &&
+  supabaseUrl !== "undefined" &&
+  supabaseAnonKey !== "undefined" &&
+  supabaseUrl !== "null" &&
+  supabaseAnonKey !== "null"
 );
 
 // Initialize client (always instantiate, but we will check `isSupabaseConfigured` before calling methods to prevent runtime crashes)
