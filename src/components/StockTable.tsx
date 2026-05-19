@@ -8,6 +8,101 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMarketStore } from "@/store/useStore";
 
+// Advanced signal and probability scoring engine
+function calculateSignalAndProbability(stock: StockData, type: "gainer" | "loser", callPutBias: string | null) {
+  const ltp = stock.ltp;
+  const high = stock.high_price;
+  const low = stock.low_price;
+  const yHigh = stock.yearHigh;
+  const yLow = stock.yearLow;
+  const change = stock.perChange;
+  const vol = stock.trade_quantity;
+
+  let signal = "Consolidating";
+  let signalType: "bullish" | "bearish" | "neutral" = "neutral";
+  
+  const range = high - low;
+  const positionInRange = range > 0 ? (ltp - low) / range : 0.5;
+  
+  const isNearHigh = positionInRange >= 0.90;
+  const isNearLow = positionInRange <= 0.10;
+  const isVolSurge = vol > 150000;
+
+  if (yHigh && ltp >= yHigh * 0.985) {
+    signal = "52W High Breakout";
+    signalType = "bullish";
+  } else if (yLow && ltp <= yLow * 1.015) {
+    signal = "52W Low Breakdown";
+    signalType = "bearish";
+  } else if (isNearHigh && change > 1.5) {
+    signal = isVolSurge ? "Volume Breakout" : "Bullish Breakout";
+    signalType = "bullish";
+  } else if (isNearLow && change < -1.5) {
+    signal = isVolSurge ? "Volume Breakdown" : "Bearish Breakdown";
+    signalType = "bearish";
+  } else if (isNearHigh) {
+    signal = "Near Resistance";
+    signalType = "neutral";
+  } else if (isNearLow) {
+    signal = "Near Support";
+    signalType = "neutral";
+  } else if (change > 0.5) {
+    signal = "Bullish Bias";
+    signalType = "bullish";
+  } else if (change < -0.5) {
+    signal = "Bearish Bias";
+    signalType = "bearish";
+  }
+
+  let score = 50;
+  
+  const changeFactor = Math.min(Math.abs(change) * 4, 20);
+  if (change > 0) {
+    score += changeFactor;
+  } else {
+    score -= changeFactor;
+  }
+
+  const rangeWeight = (positionInRange - 0.5) * 15;
+  score += rangeWeight;
+
+  if (yHigh && yLow) {
+    const yRange = yHigh - yLow;
+    const positionInYRange = yRange > 0 ? (ltp - yLow) / yRange : 0.5;
+    const yRangeWeight = (positionInYRange - 0.5) * 10;
+    score += yRangeWeight;
+  }
+
+  if (callPutBias === "CALL SIDE") {
+    score += 8;
+  } else if (callPutBias === "PUT SIDE") {
+    score -= 8;
+  }
+
+  if (isVolSurge) {
+    const deviation = score - 50;
+    score += deviation * 0.15;
+  }
+
+  score = Math.max(5, Math.min(score, 95));
+
+  let action: "BUY" | "SELL" | "HOLD" = "HOLD";
+  let probability = 50;
+
+  if (score > 55) {
+    action = "BUY";
+    probability = Math.round(score);
+  } else if (score < 45) {
+    action = "SELL";
+    probability = Math.round(100 - score);
+  } else {
+    action = "HOLD";
+    probability = 50;
+  }
+
+  return { signal, signalType, action, probability };
+}
+
 interface StockTableProps {
   data: StockData[];
   type: "gainer" | "loser";
@@ -66,11 +161,11 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
           <thead className="sticky top-0 z-20 bg-card">
             <tr className="border-b border-border">
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort("symbol")}>Symbol</th>
-              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("ltp")}>LTP</th>
+              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("ltp")}>LTP & Range</th>
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("perChange")}>% Chg</th>
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("trade_quantity")}>Volume</th>
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Analysis & Sentiment</th>
-              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">High/Low</th>
+              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Signal & Conviction</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -101,6 +196,9 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                 const contract = oiContracts.find(c => c.symbol === stock.symbol);
                 const callPutBias = contract ? (contract.pChange && contract.pChange > 0 ? "CALL SIDE" : "PUT SIDE") : null;
                 const isHighVolume = stock.perChange > 1.5 && stock.trade_quantity > 100000;
+
+                // Calculate breakout signal and probability metrics
+                const signalData = calculateSignalAndProbability(stock, type, callPutBias);
                 
                 return (
                   <motion.tr
@@ -132,7 +230,12 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-right font-mono text-sm text-foreground">
-                      {formatNumber(stock.ltp)}
+                      <div className="flex flex-col items-end">
+                        <span className="font-bold">{formatNumber(stock.ltp)}</span>
+                        <span className="text-[10px] text-muted-foreground/60 font-medium whitespace-nowrap mt-0.5">
+                          H: {formatNumber(stock.high_price)} / L: {formatNumber(stock.low_price)}
+                        </span>
+                      </div>
                     </td>
                     <td className={cn("px-4 py-4 text-right font-bold text-sm", trendColor)}>
                       <div className="flex items-center justify-end gap-1">
@@ -190,10 +293,26 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-right text-xs text-foreground/40">
-                      <div className="flex flex-col">
-                        <span className="text-emerald-500">{formatNumber(stock.high_price)}</span>
-                        <span className="text-rose-500">{formatNumber(stock.low_price)}</span>
+                    <td className="px-4 py-4 text-right text-xs">
+                      <div className="flex flex-col items-end gap-1.5">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-md font-bold text-[9px] tracking-wider uppercase border shadow-sm whitespace-nowrap",
+                          signalData.signalType === "bullish" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
+                          signalData.signalType === "bearish" ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
+                          "bg-muted border-border text-muted-foreground"
+                        )}>
+                          {signalData.signal}
+                        </span>
+                        <span className={cn(
+                          "font-black text-[11px] flex items-center gap-1.5 whitespace-nowrap",
+                          signalData.action === "BUY" ? "text-emerald-400" :
+                          signalData.action === "SELL" ? "text-rose-400" :
+                          "text-muted-foreground/60"
+                        )}>
+                          {signalData.action === "BUY" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />}
+                          {signalData.action === "SELL" && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />}
+                          {signalData.action} {signalData.action !== "HOLD" ? `(${signalData.probability}%)` : ""}
+                        </span>
                       </div>
                     </td>
                   </motion.tr>

@@ -32,6 +32,31 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
     return { label: "Neutral", color: "text-white/40", bg: "bg-white/5", type: "neutral" };
   };
 
+  const getProbabilityAndAction = (oiChange: number, priceChange: number) => {
+    const absPrice = Math.abs(priceChange);
+    const absOI = Math.abs(oiChange);
+    
+    // Scale conviction based on change magnitude
+    const priceFactor = Math.min(absPrice * 5, 20); // max 20%
+    const oiFactor = Math.min(absOI * 2, 20); // max 20%
+    const baseScore = 55 + priceFactor + oiFactor;
+    const probability = Math.round(Math.min(baseScore, 95));
+
+    if (oiChange > 0 && priceChange > 0) {
+      return { action: "BUY", probability }; // Long Build-up
+    }
+    if (oiChange > 0 && priceChange < 0) {
+      return { action: "SELL", probability }; // Short Build-up
+    }
+    if (oiChange < 0 && priceChange > 0) {
+      return { action: "BUY", probability: Math.max(50, probability - 10) }; // Short Covering
+    }
+    if (oiChange < 0 && priceChange < 0) {
+      return { action: "SELL", probability: Math.max(50, probability - 10) }; // Long Unwinding
+    }
+    return { action: "HOLD", probability: 50 };
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 px-6 py-4 border-b border-border">
@@ -84,7 +109,7 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">OI Change %</th>
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">Price Chg %</th>
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">LTP</th>
-              <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-center">Signal</th>
+              <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-center">Signal & Action</th>
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">Volume</th>
             </tr>
           </thead>
@@ -94,6 +119,7 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
                 const oiChange = item.pChangeInOI ?? item.avgInOI ?? 0;
                 const priceChange = item.pChange ?? 0;
                 const signal = getMomentumSignal(oiChange, priceChange);
+                const actionData = getProbabilityAndAction(oiChange, priceChange);
                 const isSpurt = oiChange > 7;
                 
                 return (
@@ -134,14 +160,26 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
                     <td className="px-6 py-5 text-right font-mono text-foreground">
                       {formatNumber(item.ltp ?? item.underlyingValue ?? 0)}
                     </td>
-                    <td className="px-6 py-5 text-center">
-                      <span className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                        signal.bg, signal.color
-                      )}>
-                        {signal.type === "bullish" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                        {signal.label}
-                      </span>
+                    <td className="px-6 py-5">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                          signal.bg, signal.color
+                        )}>
+                          {signal.type === "bullish" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                          {signal.label}
+                        </span>
+                        {actionData.action !== "HOLD" && (
+                          <span className={cn(
+                            "font-black text-[11px] flex items-center gap-1.5 whitespace-nowrap",
+                            actionData.action === "BUY" ? "text-emerald-400" : "text-rose-400"
+                          )}>
+                            {actionData.action === "BUY" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />}
+                            {actionData.action === "SELL" && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />}
+                            {actionData.action} ({actionData.probability}%)
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-5 text-right text-sm text-muted-foreground">
                       {formatCompactNumber(item.volume)}
