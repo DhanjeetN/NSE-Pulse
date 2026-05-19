@@ -5,7 +5,7 @@ import fs from "fs";
 global.WebSocket = class {};
 
 // Simple env parser
-const envContent = fs.readFileSync(".env", "utf8");
+const envContent = fs.readFileSync(".env.local", "utf8");
 const env = {};
 envContent.split("\n").forEach(line => {
   const parts = line.split("=");
@@ -33,6 +33,14 @@ async function test() {
     console.error("Error querying active_users:", error);
   } else {
     console.log("Success! Active users rows:", data);
+  }
+
+  console.log("Attempting to call RPC get_active_users_count...");
+  const { data: count, error: rpcError } = await supabase.rpc("get_active_users_count");
+  if (rpcError) {
+    console.error("Error calling RPC get_active_users_count:", rpcError);
+  } else {
+    console.log("Success! RPC active users count:", count);
   }
 }
 
