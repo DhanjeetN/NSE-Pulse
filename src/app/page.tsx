@@ -8,6 +8,8 @@ import { StockTable } from "@/components/StockTable";
 import { OIAnalyzer } from "@/components/OIAnalyzer";
 import { useMarketStore } from "@/store/useStore";
 import { TrendingUp, TrendingDown, Rocket, AlertCircle } from "lucide-react";
+import { Footer } from "@/components/Footer";
+import { AdBanner } from "@/components/AdBanner";
 
 
 export default function Dashboard() {
@@ -18,10 +20,15 @@ export default function Dashboard() {
   }, [fetchData]);
 
   return (
-    <main className="min-h-screen bg-background text-foreground selection:bg-blue-500/30">
+    <main className="min-h-screen bg-background text-foreground selection:bg-blue-500/30 flex flex-col">
       <Header />
 
-      <div className="container mx-auto px-6 py-8">
+      {/* Header Ad Unit - Desktop Leaderboard / Mobile Banner */}
+      {/* <div className="container mx-auto px-6 pt-6">
+        <AdBanner format="horizontal" slot="1234567890" label="Advertisement - Header Leaderboard" />
+      </div> */}
+
+      <div className="container mx-auto px-6 py-8 flex-grow">
         <SummaryCards />
 
         {error && (
@@ -48,6 +55,11 @@ export default function Dashboard() {
             <StockTable data={losers} type="loser" isLoading={isLoading} />
           </GlassCard>
         </div>
+
+        {/* Mid Page Ad Unit - In-Feed Banner */}
+        {/* <div className="mb-8">
+          <AdBanner format="horizontal" slot="0987654321" label="Advertisement - In-Feed Responsive" />
+        </div> */}
 
         <div className="grid grid-cols-1 gap-8">
           <GlassCard
@@ -79,14 +91,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <footer className="container mx-auto px-6 py-12 border-t border-white/5 text-center">
-        <p className="text-foreground/40 text-xs font-medium uppercase tracking-[0.2em]">
-          Institutional Grade Momentum Analysis • NSE Pulse v1.0
-        </p>
-        <p className="text-foreground/30 text-[10px] font-bold mt-2 tracking-wider">
-          Powered by DN
-        </p>
-      </footer>
+      <Footer />
     </main>
   );
 }
