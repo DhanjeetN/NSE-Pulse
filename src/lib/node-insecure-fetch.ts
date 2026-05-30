@@ -9,9 +9,9 @@ let insecureDispatcher: UndiciDispatcher | null | undefined;
 
 export function useTlsInsecureBypass(envKey: "NSE_TLS_INSECURE" | "D1_TLS_INSECURE"): boolean {
   if (process.env[envKey] !== "1") return false;
+  // Never during production build or deployed Worker — local `next dev` only
+  if (process.env.NODE_ENV !== "development") return false;
   if (process.env.NEXT_RUNTIME === "edge") return false;
-  // Cloudflare Workers (OpenNext production)
-  if (typeof WebSocketPair !== "undefined") return false;
   return true;
 }
 
