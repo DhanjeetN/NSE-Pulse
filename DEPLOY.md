@@ -62,6 +62,8 @@ Uses your Cloudflare account via Wrangler CLI.
 
 ## Production notes
 
+- **`wrangler.jsonc` must include** the `assets` block (`.open-next/assets`) and `WORKER_SELF_REFERENCE` — without this, CSS/JS return 404 on the live site.
+- Set `"keep_names": false` in `wrangler.jsonc` to fix `__name is not defined` (next-themes).
 - **D1** is bound as `DB` in `wrangler.jsonc` — contact form and online count work without REST env vars in production.
 - **Do not** commit `.env` — use Cloudflare dashboard secrets only if you need extra vars.
 - Local-only vars (`D1_TLS_INSECURE`, `NSE_TLS_INSECURE`) are not required on Cloudflare.

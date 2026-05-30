@@ -2,9 +2,21 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nse-momentum-pulse",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2026-05-28",
+  "compatibility_date": "2024-12-30",
   "compatibility_flags": [
-    "nodejs_compat"
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "keep_names": false,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "nse-momentum-pulse"
+    }
   ],
   "observability": {
     "enabled": true
