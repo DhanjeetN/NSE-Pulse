@@ -50,31 +50,36 @@ export interface OISpurtData {
   pChange?: number; // Contracts only
 }
 
+async function parseNseResponse(res: Response, label: string) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = typeof data?.error === "string" ? data.error : `HTTP ${res.status}`;
+    throw new Error(`Failed to fetch ${label}: ${detail}`);
+  }
+  return data;
+}
+
 export const fetchGainers = async (): Promise<StockData[]> => {
   const res = await fetch("/api/nse/live-analysis-variations?index=gainers");
-  if (!res.ok) throw new Error("Failed to fetch gainers");
-  const data = await res.json();
+  const data = await parseNseResponse(res, "gainers");
   return data?.FOSec?.data || data?.NIFTY?.data || [];
 };
 
 export const fetchLosers = async (): Promise<StockData[]> => {
   const res = await fetch("/api/nse/live-analysis-variations?index=loosers");
-  if (!res.ok) throw new Error("Failed to fetch losers");
-  const data = await res.json();
+  const data = await parseNseResponse(res, "losers");
   return data?.FOSec?.data || data?.NIFTY?.data || [];
 };
 
 export const fetchOISpurtsUnderlyings = async (): Promise<OISpurtData[]> => {
   const res = await fetch("/api/nse/live-analysis-oi-spurts-underlyings");
-  if (!res.ok) throw new Error("Failed to fetch OI spurts underlyings");
-  const data = await res.json();
+  const data = await parseNseResponse(res, "OI spurts underlyings");
   return data.data || [];
 };
 
 export const fetchOISpurtsContracts = async (): Promise<OISpurtData[]> => {
   const res = await fetch("/api/nse/live-analysis-oi-spurts-contracts");
-  if (!res.ok) throw new Error("Failed to fetch OI spurts contracts");
-  const data = await res.json();
+  const data = await parseNseResponse(res, "OI spurts contracts");
   
   if (!data?.data) return [];
   
@@ -91,14 +96,12 @@ export const fetchOISpurtsContracts = async (): Promise<OISpurtData[]> => {
 
 export const fetchCorporateActions = async (): Promise<CorporateAction[]> => {
   const res = await fetch("/api/nse/corporates-corporateActions?index=equities");
-  if (!res.ok) throw new Error("Failed to fetch corporate actions");
-  const data = await res.json();
+  const data = await parseNseResponse(res, "corporate actions");
   return data || [];
 };
 
 export const fetchFinancialEvents = async (): Promise<FinancialEvent[]> => {
   const res = await fetch("/api/nse/event-calendar");
-  if (!res.ok) throw new Error("Failed to fetch financial events");
-  const data = await res.json();
+  const data = await parseNseResponse(res, "financial events");
   return data || [];
 };

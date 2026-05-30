@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nse-momentum-pulse",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-05-28",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nse-pulse-db",
+      "database_id": "46028341-f348-4996-9f6c-7f4b49b3deb8",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

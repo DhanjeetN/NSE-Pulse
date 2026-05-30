@@ -14,7 +14,7 @@ export function Header() {
   const [countdown, setCountdown] = useState(15);
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
-  const { viewersCount, isConfigured } = useLiveViewers();
+  const { viewersCount, isLive } = useLiveViewers();
 
   useEffect(() => {
     setMounted(true);
@@ -100,16 +100,33 @@ export function Header() {
 
         <div className="flex items-center gap-4">
           {/* Active Viewers Counter */}
-          <div 
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-medium text-xs shadow-sm"
+          <div
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-xl border font-medium text-xs shadow-sm",
+              isLive
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                : "bg-muted border-border text-muted-foreground"
+            )}
+            title={
+              isLive
+                ? "Users active on the site in the last 60 seconds (from D1)"
+                : "Connecting to live viewer service…"
+            }
           >
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              {isLive && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              )}
+              <span
+                className={cn(
+                  "relative inline-flex rounded-full h-2 w-2",
+                  isLive ? "bg-emerald-500" : "bg-muted-foreground/50"
+                )}
+              />
             </span>
             <span className="font-mono font-bold flex items-center gap-1">
-              <span>{mounted ? viewersCount : "---"}</span>
-              <span>Live</span>
+              <span>{mounted && isLive ? viewersCount : "---"}</span>
+              <span>Online</span>
             </span>
           </div>
 

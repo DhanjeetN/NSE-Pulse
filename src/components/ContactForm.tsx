@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Send, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export function ContactForm() {
   const [name, setName] = useState("");
@@ -33,17 +32,24 @@ export function ContactForm() {
     }
 
     try {
-      if (isSupabaseConfigured) {
-        const { error: dbError } = await supabase
-          .from("contact_submissions")
-          .insert([{ name, email, subject, message }]);
-        
-        if (dbError) throw dbError;
-      } else {
-        // Fallback simulation if database credentials are not supplied
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, email, subject, message }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const apiError =
+          typeof data?.error === "string"
+            ? data.error
+            : `API returned status ${response.status}`;
+        throw new Error(apiError);
       }
-      
+
       setSubmitSuccess(true);
       setName("");
       setEmail("");
@@ -51,7 +57,9 @@ export function ContactForm() {
       setMessage("");
     } catch (err) {
       console.error("Contact form submission error:", err);
-      setError("Failed to send message. Please check your connection and try again.");
+      const message =
+        err instanceof Error ? err.message : "Failed to send message. Please try again.";
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }

@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const NSE_BASE_URL = "https://www.nseindia.com";
+import { fetchFromNSE } from "@/lib/nse-proxy";
 
 export const runtime = "nodejs";
-
-const headers = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-  Referer: "https://www.nseindia.com/",
-  Accept: "*/*",
-  "Accept-Language": "en-US,en;q=0.9",
-};
 
 export async function GET(
   request: NextRequest,
@@ -18,51 +9,47 @@ export async function GET(
 ) {
   try {
     const resolvedParams = await params;
-
     const path = resolvedParams.path.join("/");
-
     const searchParams = request.nextUrl.searchParams.toString();
 
-    const apiUrl =
-      `${NSE_BASE_URL}/api/${path}` +
-      (searchParams ? `?${searchParams}` : "");
-
-    // First request to get cookies/session
-    await fetch(NSE_BASE_URL, {
-      headers,
-      cache: "no-store",
-    });
-
-    // Actual NSE API request
-    const response = await fetch(apiUrl, {
-      headers,
-      cache: "no-store",
-    });
+    const response = await fetchFromNSE(path, searchParams || undefined);
 
     if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.error(`NSE API ${response.status} for /api/${path}:`, body.slice(0, 200));
       return NextResponse.json(
-        {
-          error: `NSE API Error ${response.status}`,
-        },
-        {
-          status: response.status,
-        }
+        { error: `NSE API returned ${response.status}` },
+        { status: response.status }
+      );
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      const body = await response.text();
+      console.error(`NSE non-JSON response for /api/${path}:`, body.slice(0, 200));
+      return NextResponse.json(
+        { error: "NSE returned an unexpected response. Session may have expired." },
+        { status: 502 }
       );
     }
 
     const data = await response.json();
-
     return NextResponse.json(data);
-  } catch (error) {
-    console.error("NSE Proxy Error:", error);
+  } catch (error: unknown) {
+    console.error("NSE Proxy Gateway Error:", error);
+    const message = error instanceof Error ? error.message : "Failed to fetch NSE data";
+    const isTlsError =
+      message.includes("certificate") ||
+      message.includes("UNABLE_TO_VERIFY") ||
+      (error as NodeJS.ErrnoException)?.code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE";
 
     return NextResponse.json(
       {
-        error: "Failed to fetch NSE data",
+        error: isTlsError
+          ? "TLS error reaching NSE. Set NSE_TLS_INSECURE=1 in .env for local dev behind VPN/proxy."
+          : "Failed to fetch NSE data from gateway",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
