@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchFromNSE } from "@/lib/nse-proxy";
 
-export const runtime = "nodejs";
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
@@ -46,8 +44,8 @@ export async function GET(
     return NextResponse.json(
       {
         error: isTlsError
-          ? "TLS error reaching NSE. Set NSE_TLS_INSECURE=1 in .env for local dev behind VPN/proxy."
-          : "Failed to fetch NSE data from gateway",
+          ? "TLS error reaching NSE. Set NSE_TLS_INSECURE=1 in .env and restart `npm run dev`."
+          : message || "Failed to fetch NSE data from gateway",
       },
       { status: 500 }
     );

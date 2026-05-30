@@ -1,4 +1,4 @@
-import { Agent } from "undici";
+import { fetchWithOptionalTlsBypass } from "@/lib/node-insecure-fetch";
 
 function isPlaceholder(value?: string | null) {
   if (!value) return true;
@@ -28,7 +28,7 @@ function getD1RestConfig() {
       ? `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`
       : "";
 
-  return { accountId, databaseId, apiToken, queryUrl };
+  return { queryUrl, apiToken };
 }
 
 export function hasCloudflareD1Rest() {
@@ -48,28 +48,24 @@ type D1RestPayload = {
   error?: string;
 };
 
-const d1FetchDispatcher =
-  process.env.D1_TLS_INSECURE === "1" ||
-  process.env.TLS_INSECURE === "1"
-    ? new Agent({ connect: { rejectUnauthorized: false } })
-    : undefined;
-
 async function cloudflareD1Request(body: Record<string, unknown>) {
   const { queryUrl, apiToken } = getD1RestConfig();
   if (!queryUrl || !apiToken) {
     throw new Error("Cloudflare D1 REST is not configured.");
   }
 
-  const response = await fetch(queryUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiToken}`,
+  const response = await fetchWithOptionalTlsBypass(
+    queryUrl,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiToken}`,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-    // @ts-expect-error undici dispatcher for corporate TLS bypass in dev
-    dispatcher: d1FetchDispatcher,
-  });
+    "D1_TLS_INSECURE"
+  );
 
   const payload = (await response.json()) as D1RestPayload;
   if (!response.ok || payload?.success !== true) {

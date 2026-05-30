@@ -1,8 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { isD1Configured, recordHeartbeat } from "@/lib/d1";
 
-export const runtime = "nodejs";
-
 function validateHeartbeatPayload(body: unknown) {
   const payload = body as Record<string, unknown>;
   const id = typeof payload?.id === "string" ? payload.id.trim() : "";
