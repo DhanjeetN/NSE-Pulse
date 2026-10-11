@@ -2,8 +2,8 @@
 
 import { useMarketStore } from "@/store/useStore";
 import { format } from "date-fns";
-import { Activity, Clock, RefreshCw, Power, Zap, Search, Sun, Moon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Activity, Clock, RefreshCw, Power, Zap, Sun, Moon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useLiveViewers } from "@/hooks/useLiveViewers";
@@ -12,52 +12,40 @@ export function Header() {
   const { lastUpdated, autoRefresh, toggleAutoRefresh, fetchData, isLoading } = useMarketStore();
   const [now, setNow] = useState(new Date());
   const [countdown, setCountdown] = useState(15);
-  const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
   const { viewersCount, isLive } = useLiveViewers();
 
-  useEffect(() => {
-    setMounted(true);
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Automatically turn off auto-refresh if the market is offline/closed
-  useEffect(() => {
-    if (mounted && !isMarketOpen() && autoRefresh) {
-      useMarketStore.setState({ autoRefresh: false });
-    }
-  }, [mounted, now, autoRefresh]);
-
-  useEffect(() => {
-    if (!autoRefresh || !isMarketOpen()) {
-      setCountdown(15);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setCountdown((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [autoRefresh]);
-
-  useEffect(() => {
-    if (countdown <= 0) {
-      fetchData();
-      setCountdown(15);
-    }
-  }, [countdown, fetchData]);
-
-  const isMarketOpen = () => {
+  const isMarketOpen = useMemo(() => {
     const hours = now.getHours();
     const minutes = now.getMinutes();
     const day = now.getDay();
     const timeNum = hours * 100 + minutes;
-    
-    // NSE: 9:15 to 15:30, Mon-Fri
+
     return day >= 1 && day <= 5 && timeNum >= 915 && timeNum <= 1530;
-  };
+  }, [now]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!autoRefresh || !isMarketOpen) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          fetchData();
+          return 15;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [autoRefresh, fetchData, isMarketOpen]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/80 backdrop-blur-xl">
@@ -71,10 +59,10 @@ export function Header() {
             <div className="flex items-center gap-2">
               <div className={cn(
                 "h-2 w-2 rounded-full animate-pulse",
-                isMarketOpen() ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]"
+                isMarketOpen ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]"
               )} />
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                {isMarketOpen() ? "Market Open" : "Market Closed"}
+                {isMarketOpen ? "Market Open" : "Market Closed"}
               </span>
             </div>
           </div>
@@ -85,7 +73,7 @@ export function Header() {
             <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Current Time</span>
             <div className="flex items-center gap-2 text-sm font-mono font-bold text-foreground">
               <Clock className="h-3 w-3 text-blue-500" />
-              {mounted ? format(now, "HH:mm:ss") : "--:--:--"}
+              {format(now, "HH:mm:ss")}
             </div>
           </div>
           <div className="h-8 w-px bg-border" />
@@ -99,7 +87,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Active Viewers Counter */}
           <div
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 rounded-xl border font-medium text-xs shadow-sm",
@@ -125,7 +112,7 @@ export function Header() {
               />
             </span>
             <span className="font-mono font-bold flex items-center gap-1">
-              <span>{mounted && isLive ? viewersCount : "---"}</span>
+              <span>{isLive ? viewersCount : "---"}</span>
               <span>Online</span>
             </span>
           </div>
@@ -133,22 +120,22 @@ export function Header() {
           <div className="flex items-center gap-2 bg-muted p-1 rounded-xl border border-border">
             <button
               onClick={toggleAutoRefresh}
-              disabled={!isMarketOpen()}
+              disabled={!isMarketOpen}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
                 autoRefresh ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground",
-                !isMarketOpen() && "opacity-50 cursor-not-allowed hover:text-muted-foreground"
+                !isMarketOpen && "opacity-50 cursor-not-allowed hover:text-muted-foreground"
               )}
-              title={!isMarketOpen() ? "Auto-refresh is disabled because the market is closed" : undefined}
+              title={!isMarketOpen ? "Auto-refresh is disabled because the market is closed" : undefined}
             >
               <Power className="h-3 w-3" />
-              {autoRefresh && isMarketOpen() ? `Auto: ${countdown}s` : "Auto Off"}
+              {autoRefresh && isMarketOpen ? `Auto: ${countdown}s` : "Auto Off"}
             </button>
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-background transition-all"
             >
-              {mounted && theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <button
               onClick={() => fetchData()}

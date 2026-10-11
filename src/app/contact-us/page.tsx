@@ -32,7 +32,7 @@ export default function ContactUs() {
             Contact Us
           </h1>
           <p className="text-sm text-muted-foreground font-mono">
-            Have Feedback or Inquiries? We'd Love to Hear From You.
+            Have Feedback or Inquiries? We&apos;d Love to Hear From You.
           </p>
         </div>
 

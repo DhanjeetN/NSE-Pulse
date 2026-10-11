@@ -84,10 +84,13 @@ export const fetchOISpurtsContracts = async (): Promise<OISpurtData[]> => {
   if (!data?.data) return [];
   
   const allContracts: OISpurtData[] = [];
-  data.data.forEach((group: any) => {
+  data.data.forEach((group: Record<string, unknown>) => {
     const key = Object.keys(group)[0];
-    if (Array.isArray(group[key])) {
-      allContracts.push(...group[key]);
+    if (!key) return;
+
+    const value = group[key];
+    if (Array.isArray(value)) {
+      allContracts.push(...(value as OISpurtData[]));
     }
   });
   

@@ -98,7 +98,7 @@ export default function Disclaimer() {
               2. Data Accuracy & Sourcing
             </h2>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              NSE Pulse retrieves raw financial statistics using publicly available data feeds from the National Stock Exchange of India (NSE). While we strive to ensure that the visualization is accurate and updated in real time during market hours, the data is provided "as is" and "as available". 
+              NSE Pulse retrieves raw financial statistics using publicly available data feeds from the National Stock Exchange of India (NSE). While we strive to ensure that the visualization is accurate and updated in real time during market hours, the data is provided &quot;as is&quot; and &quot;as available&quot;.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               We make no representations or warranties, express or implied, regarding the timeliness, completeness, accuracy, reliability, or availability of the stock prices, OI data, and calculations shown. Network delays, source feed interruptions, software glitches, and computing delays can happen. NSE Pulse will not be held responsible for any trading decisions or losses resulting from data errors or outages.

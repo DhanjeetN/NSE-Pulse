@@ -7,7 +7,7 @@ type UndiciDispatcher = import("undici").Dispatcher;
 
 let insecureDispatcher: UndiciDispatcher | null | undefined;
 
-export function useTlsInsecureBypass(envKey: "NSE_TLS_INSECURE" | "D1_TLS_INSECURE"): boolean {
+export function shouldUseTlsInsecureBypass(envKey: "NSE_TLS_INSECURE" | "D1_TLS_INSECURE"): boolean {
   if (process.env[envKey] !== "1") return false;
   // Never during production build or deployed Worker — local `next dev` only
   if (process.env.NODE_ENV !== "development") return false;
@@ -33,7 +33,7 @@ export async function fetchWithOptionalTlsBypass(
   init: RequestInit = {},
   envKey: "NSE_TLS_INSECURE" | "D1_TLS_INSECURE"
 ): Promise<Response> {
-  if (!useTlsInsecureBypass(envKey)) {
+  if (!shouldUseTlsInsecureBypass(envKey)) {
     return fetch(url, init);
   }
 

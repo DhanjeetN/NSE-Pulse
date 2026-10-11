@@ -18,7 +18,6 @@ export function useLiveViewers() {
 
   useEffect(() => {
     let isMounted = true;
-    let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
 
     let id = localStorage.getItem(VISITOR_ID_KEY);
     if (!id) {
@@ -57,13 +56,13 @@ export function useLiveViewers() {
 
     sendHeartbeat(id);
 
-    heartbeatInterval = setInterval(() => {
+    const heartbeatInterval = setInterval(() => {
       sendHeartbeat(id);
     }, HEARTBEAT_INTERVAL_MS);
 
     return () => {
       isMounted = false;
-      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      clearInterval(heartbeatInterval);
     };
   }, []);
 

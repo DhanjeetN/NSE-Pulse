@@ -31,7 +31,7 @@ interface MarketState {
   setRefreshInterval: (interval: number) => void;
 }
 
-export const useMarketStore = create<MarketState>((set, get) => ({
+export const useMarketStore = create<MarketState>((set) => ({
   gainers: [],
   losers: [],
   oiUnderlyings: [],
@@ -66,10 +66,11 @@ export const useMarketStore = create<MarketState>((set, get) => ({
         isLoading: false,
         lastUpdated: new Date(),
       });
-    } catch (err: any) {
-      set({ 
-        isLoading: false, 
-        error: err.message || "An error occurred while fetching data" 
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An error occurred while fetching data";
+      set({
+        isLoading: false,
+        error: message,
       });
     }
   },

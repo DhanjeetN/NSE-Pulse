@@ -6,6 +6,7 @@ import { SummaryCards } from "@/components/SummaryCards";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { StockTable } from "@/components/StockTable";
 import { OIAnalyzer } from "@/components/OIAnalyzer";
+import { ScannerBoard } from "@/components/ScannerBoard";
 import { useMarketStore } from "@/store/useStore";
 import { TrendingUp, TrendingDown, Rocket, AlertCircle } from "lucide-react";
 import { Footer } from "@/components/Footer";
@@ -37,6 +38,8 @@ export default function Dashboard() {
             <p className="text-sm font-medium">Error: {error}. Please check if the market is open or try manual refresh.</p>
           </div>
         )}
+
+        <ScannerBoard />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <GlassCard

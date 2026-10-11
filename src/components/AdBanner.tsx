@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
+
+type AdSenseWindow = Window & {
+  adsbygoogle?: Array<Record<string, unknown>>;
+};
 
 interface AdBannerProps {
   slot?: string;
@@ -15,22 +19,19 @@ interface AdBannerProps {
 
 export function AdBanner({
   slot,
-  client = "ca-pub-placeholder", // Replace with real publisher ID if available
+  client = "ca-pub-placeholder",
   style,
   format = "auto",
   responsive = true,
   className,
   label = "Sponsored Advertisement",
 }: AdBannerProps) {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [adError, setAdError] = useState(false);
-
   useEffect(() => {
-    // Only load if not placeholder
     if (client && client !== "ca-pub-placeholder" && slot) {
       try {
-        // Load the AdSense script if it hasn't been loaded yet
-        if (!(window as any).adsbygoogle) {
+        const adsWindow = window as AdSenseWindow;
+
+        if (!adsWindow.adsbygoogle) {
           const script = document.createElement("script");
           script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}`;
           script.async = true;
@@ -38,12 +39,10 @@ export function AdBanner({
           document.head.appendChild(script);
         }
 
-        // Push the ad
-        ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
-        setIsLoaded(true);
+        adsWindow.adsbygoogle = adsWindow.adsbygoogle || [];
+        adsWindow.adsbygoogle.push({});
       } catch (err) {
         console.error("AdSense placement error:", err);
-        setAdError(true);
       }
     }
   }, [client, slot]);
@@ -62,7 +61,7 @@ export function AdBanner({
     }
   };
 
-  const showPlaceholder = !slot || client === "ca-pub-placeholder" || adError;
+  const showPlaceholder = !slot || client === "ca-pub-placeholder";
 
   if (showPlaceholder) {
     return (
