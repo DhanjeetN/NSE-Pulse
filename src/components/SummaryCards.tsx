@@ -1,24 +1,20 @@
 "use client";
 
 import { useMarketStore } from "@/store/useStore";
-import { TrendingUp, TrendingDown, Zap, Target, BarChart3 } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, BarChart3, Activity } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { buildMarketPulse } from "@/lib/marketSignals";
 
 export function SummaryCards() {
   const { gainers, losers, oiUnderlyings } = useMarketStore();
-
-  const totalBullish = gainers.filter(s => s.perChange > 0).length + oiUnderlyings.filter(s => s.avgInOI !== undefined && s.avgInOI > 0).length;
-  const totalBearish = losers.filter(s => s.perChange < 0).length + oiUnderlyings.filter(s => s.avgInOI !== undefined && s.avgInOI < 0).length;
-  
-  const strongestGainer = [...gainers].sort((a, b) => b.perChange - a.perChange)[0];
-  const strongestLoser = [...losers].sort((a, b) => a.perChange - b.perChange)[0];
-  const highestOI = [...oiUnderlyings].sort((a, b) => (b.pChangeInOI ?? b.avgInOI ?? 0) - (a.pChangeInOI ?? a.avgInOI ?? 0))[0];
+  const pulse = buildMarketPulse(gainers, losers, oiUnderlyings);
 
   const stats = [
     {
       label: "Bullish Stocks",
-      value: totalBullish,
+      value: pulse.totalBullish,
+      subValue: pulse.breadth > 0 ? "Leadership" : "Soft tone",
       icon: TrendingUp,
       color: "text-emerald-400",
       bg: "bg-emerald-500/10",
@@ -26,7 +22,8 @@ export function SummaryCards() {
     },
     {
       label: "Bearish Stocks",
-      value: totalBearish,
+      value: pulse.totalBearish,
+      subValue: pulse.breadth < 0 ? "Pressure" : "Contained",
       icon: TrendingDown,
       color: "text-rose-400",
       bg: "bg-rose-500/10",
@@ -34,8 +31,8 @@ export function SummaryCards() {
     },
     {
       label: "Strongest Gainer",
-      value: strongestGainer?.symbol || "-",
-      subValue: strongestGainer?.perChange != null ? `+${strongestGainer.perChange.toFixed(2)}%` : "",
+      value: pulse.strongestGainer?.symbol || "-",
+      subValue: pulse.strongestGainer?.perChange != null ? `${pulse.strongestGainer.perChange.toFixed(2)}%` : "",
       icon: Target,
       color: "text-blue-400",
       bg: "bg-blue-500/10",
@@ -43,23 +40,32 @@ export function SummaryCards() {
     },
     {
       label: "Highest OI Spurt",
-      value: highestOI?.symbol || "-",
-      subValue: highestOI != null ? `+${(highestOI.pChangeInOI ?? highestOI.avgInOI ?? 0).toFixed(2)}%` : "",
+      value: pulse.strongestOI?.symbol || "-",
+      subValue: pulse.strongestOI != null ? `${((pulse.strongestOI.avgInOI ?? pulse.strongestOI.pChangeInOI ?? 0)).toFixed(2)}%` : "",
       icon: BarChart3,
       color: "text-amber-400",
       bg: "bg-amber-500/10",
       border: "border-amber-500/20"
+    },
+    {
+      label: "Market Regime",
+      value: pulse.regime,
+      subValue: `${pulse.bias} · ${pulse.confidence}% conviction`,
+      icon: Activity,
+      color: pulse.regime.includes("Bullish") ? "text-emerald-400" : pulse.regime.includes("Bearish") ? "text-rose-400" : "text-amber-400",
+      bg: pulse.regime.includes("Bullish") ? "bg-emerald-500/10" : pulse.regime.includes("Bearish") ? "bg-rose-500/10" : "bg-amber-500/10",
+      border: pulse.regime.includes("Bullish") ? "border-emerald-500/20" : pulse.regime.includes("Bearish") ? "border-rose-500/20" : "border-amber-500/20"
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-6 mb-8">
       {stats.map((stat, idx) => (
         <motion.div
           key={stat.label}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: idx * 0.1 }}
+          transition={{ delay: idx * 0.08 }}
           className={cn(
             "p-6 rounded-2xl border border-border bg-card shadow-sm flex flex-col gap-3 relative overflow-hidden group hover:scale-[1.02] transition-all",
             stat.border
@@ -72,12 +78,12 @@ export function SummaryCards() {
             <div className={cn("p-2 rounded-lg", stat.bg)}>
               <stat.icon className={cn("h-4 w-4", stat.color)} />
             </div>
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{stat.label}</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{stat.label}</span>
           </div>
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-col gap-1">
             <span className="text-2xl font-black text-card-foreground">{stat.value}</span>
             {stat.subValue && (
-              <span className={cn("text-xs font-bold", stat.color)}>{stat.subValue}</span>
+              <span className={cn("text-[10px] font-bold uppercase tracking-[0.12em]", stat.color)}>{stat.subValue}</span>
             )}
           </div>
         </motion.div>

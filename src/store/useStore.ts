@@ -2,8 +2,10 @@ import { create } from "zustand";
 import { 
   StockData, 
   OISpurtData, 
+  IndexSnapshot,
   fetchGainers, 
   fetchLosers, 
+  fetchMarketIndices,
   fetchOISpurtsUnderlyings, 
   fetchOISpurtsContracts,
   fetchCorporateActions,
@@ -15,6 +17,7 @@ import {
 interface MarketState {
   gainers: StockData[];
   losers: StockData[];
+  marketIndices: IndexSnapshot[];
   oiUnderlyings: OISpurtData[];
   oiContracts: OISpurtData[];
   corporateActions: CorporateAction[];
@@ -34,6 +37,7 @@ interface MarketState {
 export const useMarketStore = create<MarketState>((set) => ({
   gainers: [],
   losers: [],
+  marketIndices: [],
   oiUnderlyings: [],
   oiContracts: [],
   corporateActions: [],
@@ -47,9 +51,10 @@ export const useMarketStore = create<MarketState>((set) => ({
   fetchData: async () => {
     set({ isLoading: true, error: null });
     try {
-      const [gainers, losers, oiUnderlyings, oiContracts, corporateActions, financialEvents] = await Promise.all([
+      const [gainers, losers, marketIndices, oiUnderlyings, oiContracts, corporateActions, financialEvents] = await Promise.all([
         fetchGainers(),
         fetchLosers(),
+        fetchMarketIndices(),
         fetchOISpurtsUnderlyings(),
         fetchOISpurtsContracts(),
         fetchCorporateActions(),
@@ -59,6 +64,7 @@ export const useMarketStore = create<MarketState>((set) => ({
       set({
         gainers,
         losers,
+        marketIndices,
         oiUnderlyings,
         oiContracts,
         corporateActions,

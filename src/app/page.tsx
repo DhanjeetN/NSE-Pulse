@@ -5,10 +5,9 @@ import { Header } from "@/components/Header";
 import { SummaryCards } from "@/components/SummaryCards";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { StockTable } from "@/components/StockTable";
-import { OIAnalyzer } from "@/components/OIAnalyzer";
 import { ScannerBoard } from "@/components/ScannerBoard";
 import { useMarketStore } from "@/store/useStore";
-import { TrendingUp, TrendingDown, Rocket, AlertCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { AdBanner } from "@/components/AdBanner";
 
@@ -63,20 +62,6 @@ export default function Dashboard() {
         {/* <div className="mb-8">
           <AdBanner format="horizontal" slot="0987654321" label="Advertisement - In-Feed Responsive" />
         </div> */}
-
-        <div className="grid grid-cols-1 gap-8">
-          <GlassCard
-            title="NSE OI Spurts Analyzer"
-            badge={<Rocket className="h-4 w-4 text-amber-500" />}
-            className="min-h-[600px]"
-          >
-            <OIAnalyzer
-              underlyings={oiUnderlyings}
-              contracts={oiContracts}
-              isLoading={isLoading}
-            />
-          </GlassCard>
-        </div>
 
         {/* Disclaimer Section */}
         <div className="mt-12 p-5 rounded-2xl border border-border/40 bg-card/40 backdrop-blur-md shadow-sm hover:border-border/60 transition-all duration-300">
