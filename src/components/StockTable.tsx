@@ -1,7 +1,6 @@
 "use client";
 
 import { StockData } from "@/lib/nse-api";
-import { evaluateIntradaySignal } from "@/lib/marketSignals";
 import { cn, formatNumber, formatCompactNumber } from "@/lib/utils";
 import { TrendingUp, TrendingDown, ExternalLink, Search, Calendar, CircleDollarSign } from "lucide-react";
 import { useState } from "react";
@@ -70,7 +69,7 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("perChange")}>% Chg</th>
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("trade_quantity")}>Volume</th>
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Events & Actions</th>
-              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Intraday Signal & Rule Match</th>
+              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Daily price structure</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -81,7 +80,9 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                 const action = corporateActions.find(a => a.symbol === stock.symbol);
                 const event = financialEvents.find(e => e.symbol === stock.symbol);
                 const compactDate = event ? event.date.split('-').slice(0, 2).join(' ') : null;
-                const signalData = evaluateIntradaySignal(stock);
+                const dailyStructure = stock.perChange > 0
+                  ? "Higher on session"
+                  : stock.perChange < 0 ? "Lower on session" : "Little net change";
                 
                 return (
                   <motion.tr
@@ -152,30 +153,18 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-right text-xs">
-                      <div className="flex flex-col items-end gap-1.5" title={signalData.reasons.join(" ")}>
+                      <div className="flex flex-col items-end gap-1.5">
                         <span className={cn(
-                          "px-2 py-0.5 rounded-md font-bold text-[9px] tracking-wider uppercase border shadow-sm whitespace-nowrap",
-                          signalData.signalType === "bullish" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
-                          signalData.signalType === "bearish" ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
-                          "bg-muted border-border text-muted-foreground"
+                          "rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap",
+                          stock.perChange > 0 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" :
+                          stock.perChange < 0 ? "border-rose-500/20 bg-rose-500/10 text-rose-400" :
+                          "border-border bg-muted text-muted-foreground"
                         )}>
-                          {signalData.signal}
+                          {dailyStructure}
                         </span>
-                        <span className={cn(
-                          "font-black text-[11px] flex items-center gap-1.5 whitespace-nowrap",
-                          signalData.action === "BUY" ? "text-emerald-400" :
-                          signalData.action === "SELL" ? "text-rose-400" :
-                          "text-muted-foreground/60"
-                        )}>
-                          {signalData.action} ({signalData.confidence}% rule match)
+                        <span className="max-w-52 text-[9px] text-muted-foreground">
+                          Based on daily change only; not a trade signal.
                         </span>
-                        {signalData.reasons.length > 0 && (
-                          <span className="max-w-52 text-[9px] text-muted-foreground" title={signalData.reasons.join(" ")}>
-                            {signalData.missingInputs.length > 0
-                              ? `Missing ${signalData.missingInputs.slice(0, 3).join(", ")}${signalData.missingInputs.length > 3 ? ", ..." : ""}`
-                              : signalData.reasons[0]}
-                          </span>
-                        )}
                       </div>
                     </td>
                   </motion.tr>

@@ -31,14 +31,14 @@ export default function Dashboard() {
       </div> */}
 
       <div className="container mx-auto px-6 py-8 flex-grow">
-        <nav aria-label="Dashboard views" className="mb-6 flex w-fit gap-1 rounded-xl border border-border bg-card/70 p-1">
+        <nav aria-label="Dashboard views" className="mb-6 flex w-fit gap-1 rounded-xl border border-border/80 bg-card/70 p-1 shadow-lg shadow-black/5 backdrop-blur-xl">
           <button
             type="button"
             aria-current={activeTab === "market" ? "page" : undefined}
             onClick={() => setActiveTab("market")}
             className={cn(
               "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors",
-              activeTab === "market" ? "bg-blue-600 text-white shadow" : "text-muted-foreground hover:text-foreground",
+              activeTab === "market" ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-950/25" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
             )}
           >
             <Activity className="h-4 w-4" />
@@ -50,7 +50,7 @@ export default function Dashboard() {
             onClick={() => setActiveTab("oi-flow")}
             className={cn(
               "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors",
-              activeTab === "oi-flow" ? "bg-blue-600 text-white shadow" : "text-muted-foreground hover:text-foreground",
+              activeTab === "oi-flow" ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-950/25" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
             )}
           >
             <Waves className="h-4 w-4" />
@@ -89,7 +89,11 @@ export default function Dashboard() {
             </div>
           </>
         ) : (
-          <OIFlowStudio underlyings={oiUnderlyings} contracts={oiContracts} updatedAt={lastUpdated} />
+          <OIFlowStudio
+            underlyings={oiUnderlyings}
+            contracts={oiContracts}
+            updatedAt={lastUpdated}
+          />
         )}
 
         {/* Mid Page Ad Unit - In-Feed Banner */}

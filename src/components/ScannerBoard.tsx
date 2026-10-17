@@ -95,10 +95,10 @@ export function ScannerBoard() {
 
   return (
     <GlassCard
-      title="Intraday Signal Scanner"
+      title="Intraday Market Structure"
       badge={
-        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500">
-          Strict risk gate
+        <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-sky-500">
+          Descriptive · no trade recommendations
         </span>
       }
       className="mb-8"
@@ -160,7 +160,7 @@ export function ScannerBoard() {
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-              NSE index snapshots · Yahoo 5-minute technical read
+              NSE index snapshots · Yahoo 5-minute market structure
             </h3>
             <span className="text-[10px] text-muted-foreground">NSE snapshot · app fetch: {lastUpdated ? lastUpdated.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"} IST</span>
           </div>
@@ -206,7 +206,7 @@ export function ScannerBoard() {
                         </span>
                       </div>
                       <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                        {nifty50Bias.reasons[0]} Informational only — not an intraday BUY/SELL signal.
+                        {nifty50Bias.reasons[0]} Informational market structure only.
                       </p>
                       <div className="mt-3 border-t border-border pt-3 text-[10px] text-muted-foreground">
                         <p className="mb-1 font-semibold text-foreground">

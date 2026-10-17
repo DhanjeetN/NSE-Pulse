@@ -12,7 +12,7 @@ interface GlassCardProps {
 export function GlassCard({ children, className, title, badge, rightElement }: GlassCardProps) {
   return (
     <div className={cn(
-      "relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-300 hover:border-border/80",
+      "relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-br from-card via-card to-muted/20 shadow-lg shadow-black/5 transition-all duration-300 hover:border-border hover:shadow-xl",
       className
     )}>
       {/* Decorative gradient */}

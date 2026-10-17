@@ -41,7 +41,7 @@ export function SummaryCards() {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+    <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {stats.map((stat, idx) => (
         <motion.div
           key={stat.label}
@@ -49,7 +49,7 @@ export function SummaryCards() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: idx * 0.08 }}
           className={cn(
-            "p-6 rounded-2xl border border-border bg-card shadow-sm flex flex-col gap-3 relative overflow-hidden group hover:scale-[1.02] transition-all",
+            "group relative flex flex-col gap-3 overflow-hidden rounded-2xl border bg-gradient-to-br from-card via-card to-muted/30 p-5 shadow-lg shadow-black/5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl",
             stat.border
           )}
         >

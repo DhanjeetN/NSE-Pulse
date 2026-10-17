@@ -5,7 +5,6 @@ import { Activity, Clock, RefreshCw, Power, Zap, Sun, Moon } from "lucide-react"
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
-import { useLiveViewers } from "@/hooks/useLiveViewers";
 
 const nseTimeFormatter = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
@@ -31,7 +30,6 @@ export function Header() {
   const [now, setNow] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(15);
   const { theme, setTheme } = useTheme();
-  const { viewersCount, isLive } = useLiveViewers();
 
   const isMarketOpen = useMemo(() => {
     if (!now) return false;
@@ -109,36 +107,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          <div
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-xl border font-medium text-xs shadow-sm",
-              isLive
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                : "bg-muted border-border text-muted-foreground"
-            )}
-            title={
-              isLive
-                ? "Users active on the site in the last 60 seconds (from D1)"
-                : "Connecting to live viewer service…"
-            }
-          >
-            <span className="relative flex h-2 w-2">
-              {isLive && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              )}
-              <span
-                className={cn(
-                  "relative inline-flex rounded-full h-2 w-2",
-                  isLive ? "bg-emerald-500" : "bg-muted-foreground/50"
-                )}
-              />
-            </span>
-            <span className="font-mono font-bold flex items-center gap-1">
-              <span>{isLive ? viewersCount : "---"}</span>
-              <span>Online</span>
-            </span>
-          </div>
-
           <div className="flex items-center gap-2 bg-muted p-1 rounded-xl border border-border">
             <button
               onClick={toggleAutoRefresh}
