@@ -1,24 +1,46 @@
 "use client";
 
 import { useMarketStore } from "@/store/useStore";
-import { format } from "date-fns";
 import { Activity, Clock, RefreshCw, Power, Zap, Sun, Moon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useLiveViewers } from "@/hooks/useLiveViewers";
 
+const nseTimeFormatter = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+const nseClockFormatter = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function formatNseTime(date: Date) {
+  return nseClockFormatter.format(date);
+}
+
 export function Header() {
   const { lastUpdated, autoRefresh, toggleAutoRefresh, fetchData, isLoading } = useMarketStore();
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(15);
   const { theme, setTheme } = useTheme();
   const { viewersCount, isLive } = useLiveViewers();
 
   const isMarketOpen = useMemo(() => {
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const day = now.getDay();
+    if (!now) return false;
+    const parts = Object.fromEntries(
+      nseTimeFormatter.formatToParts(now).map(({ type, value }) => [type, value]),
+    );
+    const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday);
+    const hours = Number(parts.hour);
+    const minutes = Number(parts.minute);
     const timeNum = hours * 100 + minutes;
 
     return day >= 1 && day <= 5 && timeNum >= 915 && timeNum <= 1530;
@@ -62,7 +84,7 @@ export function Header() {
                 isMarketOpen ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]"
               )} />
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                {isMarketOpen ? "Market Open" : "Market Closed"}
+                {now ? (isMarketOpen ? "Market Open" : "Market Closed") : "Checking Market"}
               </span>
             </div>
           </div>
@@ -70,10 +92,10 @@ export function Header() {
 
         <div className="hidden lg:flex items-center gap-8 bg-muted px-6 py-2 rounded-2xl border border-border">
           <div className="flex flex-col items-center">
-            <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Current Time</span>
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">NSE Time</span>
             <div className="flex items-center gap-2 text-sm font-mono font-bold text-foreground">
               <Clock className="h-3 w-3 text-blue-500" />
-              {format(now, "HH:mm:ss")}
+              {now ? formatNseTime(now) : "--:--:--"}
             </div>
           </div>
           <div className="h-8 w-px bg-border" />
@@ -81,7 +103,7 @@ export function Header() {
             <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Last Updated</span>
             <div className="flex items-center gap-2 text-sm font-mono font-bold text-foreground">
               <Activity className="h-3 w-3 text-emerald-500" />
-              {lastUpdated ? format(lastUpdated, "HH:mm:ss") : "--:--:--"}
+              {lastUpdated ? formatNseTime(lastUpdated) : "--:--:--"}
             </div>
           </div>
         </div>

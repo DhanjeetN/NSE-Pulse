@@ -1,7 +1,7 @@
 "use client";
 
 import { useMarketStore } from "@/store/useStore";
-import { TrendingUp, TrendingDown, Target, BarChart3, Activity } from "lucide-react";
+import { Target, BarChart3, Activity } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { buildMarketPulse } from "@/lib/marketSignals";
@@ -11,24 +11,6 @@ export function SummaryCards() {
   const pulse = buildMarketPulse(gainers, losers, oiUnderlyings);
 
   const stats = [
-    {
-      label: "Bullish Stocks",
-      value: pulse.totalBullish,
-      subValue: pulse.breadth > 0 ? "Leadership" : "Soft tone",
-      icon: TrendingUp,
-      color: "text-emerald-400",
-      bg: "bg-emerald-500/10",
-      border: "border-emerald-500/20"
-    },
-    {
-      label: "Bearish Stocks",
-      value: pulse.totalBearish,
-      subValue: pulse.breadth < 0 ? "Pressure" : "Contained",
-      icon: TrendingDown,
-      color: "text-rose-400",
-      bg: "bg-rose-500/10",
-      border: "border-rose-500/20"
-    },
     {
       label: "Strongest Gainer",
       value: pulse.strongestGainer?.symbol || "-",
@@ -48,9 +30,9 @@ export function SummaryCards() {
       border: "border-amber-500/20"
     },
     {
-      label: "Market Regime",
+      label: "Mover Snapshot",
       value: pulse.regime,
-      subValue: `${pulse.bias} · ${pulse.confidence}% conviction`,
+      subValue: "Based on current mover and OI snapshots",
       icon: Activity,
       color: pulse.regime.includes("Bullish") ? "text-emerald-400" : pulse.regime.includes("Bearish") ? "text-rose-400" : "text-amber-400",
       bg: pulse.regime.includes("Bullish") ? "bg-emerald-500/10" : pulse.regime.includes("Bearish") ? "bg-rose-500/10" : "bg-amber-500/10",
@@ -59,7 +41,7 @@ export function SummaryCards() {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-6 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
       {stats.map((stat, idx) => (
         <motion.div
           key={stat.label}

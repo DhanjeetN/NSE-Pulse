@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { SummaryCards } from "@/components/SummaryCards";
+import { OIFlowStudio } from "@/components/OIFlowStudio";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { StockTable } from "@/components/StockTable";
 import { ScannerBoard } from "@/components/ScannerBoard";
 import { useMarketStore } from "@/store/useStore";
-import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, Activity, Waves } from "lucide-react";
 import { Footer } from "@/components/Footer";
-import { AdBanner } from "@/components/AdBanner";
+import { cn } from "@/lib/utils";
 
 
 export default function Dashboard() {
-  const { gainers, losers, oiUnderlyings, oiContracts, fetchData, isLoading, error } = useMarketStore();
+  const { gainers, losers, oiUnderlyings, oiContracts, fetchData, isLoading, error, lastUpdated } = useMarketStore();
+  const [activeTab, setActiveTab] = useState<"market" | "oi-flow">("market");
 
   useEffect(() => {
     fetchData();
@@ -29,7 +31,32 @@ export default function Dashboard() {
       </div> */}
 
       <div className="container mx-auto px-6 py-8 flex-grow">
-        <SummaryCards />
+        <nav aria-label="Dashboard views" className="mb-6 flex w-fit gap-1 rounded-xl border border-border bg-card/70 p-1">
+          <button
+            type="button"
+            aria-current={activeTab === "market" ? "page" : undefined}
+            onClick={() => setActiveTab("market")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors",
+              activeTab === "market" ? "bg-blue-600 text-white shadow" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Activity className="h-4 w-4" />
+            Market
+          </button>
+          <button
+            type="button"
+            aria-current={activeTab === "oi-flow" ? "page" : undefined}
+            onClick={() => setActiveTab("oi-flow")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors",
+              activeTab === "oi-flow" ? "bg-blue-600 text-white shadow" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Waves className="h-4 w-4" />
+            OI Flow
+          </button>
+        </nav>
 
         {error && (
           <div className="mb-8 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center gap-3 text-rose-400">
@@ -38,25 +65,32 @@ export default function Dashboard() {
           </div>
         )}
 
-        <ScannerBoard />
+        {activeTab === "market" ? (
+          <>
+            <SummaryCards />
+            <ScannerBoard />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <GlassCard
-            title="Top Gainers"
-            badge={<TrendingUp className="h-4 w-4 text-emerald-500" />}
-            className="h-full"
-          >
-            <StockTable data={gainers} type="gainer" isLoading={isLoading} />
-          </GlassCard>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <GlassCard
+                title="Top Gainers"
+                badge={<TrendingUp className="h-4 w-4 text-emerald-500" />}
+                className="h-full"
+              >
+                <StockTable data={gainers} type="gainer" isLoading={isLoading} />
+              </GlassCard>
 
-          <GlassCard
-            title="Top Losers"
-            badge={<TrendingDown className="h-4 w-4 text-rose-500" />}
-            className="h-full"
-          >
-            <StockTable data={losers} type="loser" isLoading={isLoading} />
-          </GlassCard>
-        </div>
+              <GlassCard
+                title="Top Losers"
+                badge={<TrendingDown className="h-4 w-4 text-rose-500" />}
+                className="h-full"
+              >
+                <StockTable data={losers} type="loser" isLoading={isLoading} />
+              </GlassCard>
+            </div>
+          </>
+        ) : (
+          <OIFlowStudio underlyings={oiUnderlyings} contracts={oiContracts} updatedAt={lastUpdated} />
+        )}
 
         {/* Mid Page Ad Unit - In-Feed Banner */}
         {/* <div className="mb-8">

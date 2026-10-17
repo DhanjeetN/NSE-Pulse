@@ -1,97 +1,476 @@
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const nseSessionFormatter = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
 
-export function calculateSignalAndProbability(stock, type, callPutBias) {
-  const ltp = Number(stock.ltp ?? 0);
-  const high = Number(stock.high_price ?? ltp);
-  const low = Number(stock.low_price ?? ltp);
-  const yHigh = Number(stock.yearHigh ?? 0);
-  const yLow = Number(stock.yearLow ?? 0);
-  const change = Number(stock.perChange ?? 0);
-  const vol = Number(stock.trade_quantity ?? 0);
+function isWithinNseSession(timestamp) {
+  const parts = Object.fromEntries(nseSessionFormatter.formatToParts(new Date(timestamp)).map(({ type, value }) => [type, value]));
+  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);
+  const time = Number(parts.hour) * 100 + Number(parts.minute);
+  return day >= 1 && day <= 5 && time >= 915 && time <= 1530;
+}
 
-  const range = high - low;
-  const positionInRange = range > 0 ? (ltp - low) / range : 0.5;
-  const positionInYearRange = yHigh && yLow ? (ltp - yLow) / (yHigh - yLow) : 0.5;
+export function evaluateIndexSnapshotBias(snapshot = {}, { now = Date.now() } = {}) {
+  const current = Number(snapshot.currentPrice);
+  const open = Number(snapshot.open);
+  const high = Number(snapshot.high);
+  const low = Number(snapshot.low);
+  const previousClose = Number(snapshot.previousClose);
+  const change = Number(snapshot.percentChange);
 
-  const isNearHigh = positionInRange >= 0.82;
-  const isNearLow = positionInRange <= 0.18;
-  const isVolSurge = vol > 150000;
-  const isStrongMove = Math.abs(change) >= 2.5;
-  const isEarlyBull = change > 0.6 && change < 4 && positionInRange > 0.45 && !isNearHigh;
-  const isEarlyBear = change < -0.6 && change > -4 && positionInRange < 0.55 && !isNearLow;
-
-  let signal = 'Consolidating';
-  let signalType = 'neutral';
-
-  if (yHigh && ltp >= yHigh * 0.985) {
-    signal = '52W High Breakout';
-    signalType = 'bullish';
-  } else if (yLow && ltp <= yLow * 1.015) {
-    signal = '52W Low Breakdown';
-    signalType = 'bearish';
-  } else if (isNearHigh && change > 1.8) {
-    signal = isVolSurge ? 'Volume Breakout' : 'Momentum Buy';
-    signalType = 'bullish';
-  } else if (isNearLow && change < -1.8) {
-    signal = isVolSurge ? 'Volume Breakdown' : 'Momentum Sell';
-    signalType = 'bearish';
-  } else if (isEarlyBull) {
-    signal = 'Early Bullish';
-    signalType = 'bullish';
-  } else if (isEarlyBear) {
-    signal = 'Early Bearish';
-    signalType = 'bearish';
-  } else if (isNearHigh) {
-    signal = 'Resistance Test';
-    signalType = 'neutral';
-  } else if (isNearLow) {
-    signal = 'Support Test';
-    signalType = 'neutral';
-  } else if (change > 0.3) {
-    signal = 'Bullish Bias';
-    signalType = 'bullish';
-  } else if (change < -0.3) {
-    signal = 'Bearish Bias';
-    signalType = 'bearish';
+  if (![current, open, high, low, previousClose, change].every(Number.isFinite)
+    || current <= 0 || open <= 0 || previousClose <= 0 || high <= low) {
+    return {
+      bias: 'Unavailable',
+      marketStatus: isWithinNseSession(now) ? 'Market open' : 'Market closed',
+      reasons: ['NSE index snapshot is missing valid open, high, low, previous close, or change data.'],
+    };
   }
 
-  let score = 50;
-  const changeFactor = Math.min(Math.abs(change) * 3.2, 22);
-  score += change >= 0 ? changeFactor : -changeFactor;
-  score += (positionInRange - 0.5) * 18;
+  const rangePosition = (current - low) / (high - low);
+  const bullish = current > open
+    && current > previousClose
+    && change > 0
+    && rangePosition >= 0.6;
+  const bearish = current < open
+    && current < previousClose
+    && change < 0
+    && rangePosition <= 0.4;
+  const marketOpen = isWithinNseSession(now);
 
-  if (yHigh && yLow) {
-    score += (positionInYearRange - 0.5) * 12;
+  if (bullish) {
+    return {
+      bias: 'Bullish bias',
+      marketStatus: marketOpen ? 'Market open' : 'Market closed · last snapshot',
+      reasons: ['NIFTY 50 is above its open and previous close, and in the upper part of its session range.'],
+    };
+  }
+  if (bearish) {
+    return {
+      bias: 'Bearish bias',
+      marketStatus: marketOpen ? 'Market open' : 'Market closed · last snapshot',
+      reasons: ['NIFTY 50 is below its open and previous close, and in the lower part of its session range.'],
+    };
   }
 
-  if (isStrongMove) score += change > 0 ? 6 : -6;
-  if (isEarlyBull) score += 10;
-  if (isEarlyBear) score -= 10;
-  if (isVolSurge) score += change > 0 ? 8 : -8;
+  return {
+    bias: 'Mixed / no bias',
+    marketStatus: marketOpen ? 'Market open' : 'Market closed · last snapshot',
+    reasons: ['NIFTY 50 does not have aligned direction and session-range confirmation in this snapshot.'],
+  };
+}
 
-  if (callPutBias === 'CALL SIDE') score += 8;
-  else if (callPutBias === 'PUT SIDE') score -= 8;
+function calculateEma(values, period) {
+  const result = Array(values.length).fill(null);
+  if (values.length < period) return result;
+  const multiplier = 2 / (period + 1);
+  let average = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+  result[period - 1] = average;
 
-  if (type === 'gainer' && change <= 0) score -= 5;
-  if (type === 'loser' && change >= 0) score += 5;
+  for (let index = period; index < values.length; index += 1) {
+    average = values[index] * multiplier + average * (1 - multiplier);
+    result[index] = average;
+  }
+  return result;
+}
 
-  score = clamp(score, 8, 96);
+function calculateRsiSeries(values, period = 14) {
+  const result = Array(values.length).fill(null);
+  if (values.length <= period) return result;
 
-  let action = 'HOLD';
-  let probability = 50;
+  let averageGain = 0;
+  let averageLoss = 0;
+  for (let index = 1; index <= period; index += 1) {
+    const change = values[index] - values[index - 1];
+    averageGain += Math.max(change, 0);
+    averageLoss += Math.max(-change, 0);
+  }
+  averageGain /= period;
+  averageLoss /= period;
+  result[period] = averageLoss === 0 ? 100 : 100 - (100 / (1 + averageGain / averageLoss));
 
-  if (score >= 58) {
-    action = 'BUY';
-    probability = Math.round(score);
-  } else if (score <= 42) {
-    action = 'SELL';
-    probability = Math.round(100 - score);
-  } else {
-    action = 'HOLD';
-    probability = 50;
+  for (let index = period + 1; index < values.length; index += 1) {
+    const change = values[index] - values[index - 1];
+    averageGain = (averageGain * (period - 1) + Math.max(change, 0)) / period;
+    averageLoss = (averageLoss * (period - 1) + Math.max(-change, 0)) / period;
+    result[index] = averageLoss === 0 ? 100 : 100 - (100 / (1 + averageGain / averageLoss));
+  }
+  return result;
+}
+
+function calculateAdx(candles, period = 14) {
+  if (candles.length < period * 2 + 1) return null;
+  const trueRanges = Array(candles.length).fill(0);
+  const positiveMoves = Array(candles.length).fill(0);
+  const negativeMoves = Array(candles.length).fill(0);
+
+  for (let index = 1; index < candles.length; index += 1) {
+    const current = candles[index];
+    const previous = candles[index - 1];
+    trueRanges[index] = Math.max(
+      current.high - current.low,
+      Math.abs(current.high - previous.close),
+      Math.abs(current.low - previous.close),
+    );
+    const upMove = current.high - previous.high;
+    const downMove = previous.low - current.low;
+    if (upMove > downMove && upMove > 0) positiveMoves[index] = upMove;
+    if (downMove > upMove && downMove > 0) negativeMoves[index] = downMove;
   }
 
-  return { signal, signalType, action, probability };
+  let smoothedTr = trueRanges.slice(1, period + 1).reduce((sum, value) => sum + value, 0);
+  let smoothedPlus = positiveMoves.slice(1, period + 1).reduce((sum, value) => sum + value, 0);
+  let smoothedMinus = negativeMoves.slice(1, period + 1).reduce((sum, value) => sum + value, 0);
+  const dxValues = Array(candles.length).fill(null);
+
+  for (let index = period; index < candles.length; index += 1) {
+    if (index > period) {
+      smoothedTr = smoothedTr - smoothedTr / period + trueRanges[index];
+      smoothedPlus = smoothedPlus - smoothedPlus / period + positiveMoves[index];
+      smoothedMinus = smoothedMinus - smoothedMinus / period + negativeMoves[index];
+    }
+    if (smoothedTr === 0) continue;
+    const plusDi = 100 * smoothedPlus / smoothedTr;
+    const minusDi = 100 * smoothedMinus / smoothedTr;
+    const diSum = plusDi + minusDi;
+    dxValues[index] = diSum === 0 ? 0 : 100 * Math.abs(plusDi - minusDi) / diSum;
+  }
+
+  const firstAdxIndex = period * 2 - 1;
+  let adx = dxValues.slice(period, firstAdxIndex + 1).reduce((sum, value) => sum + (value ?? 0), 0) / period;
+  for (let index = firstAdxIndex + 1; index < candles.length; index += 1) {
+    adx = (adx * (period - 1) + (dxValues[index] ?? 0)) / period;
+  }
+  return adx;
+}
+
+function calculateSupertrend(candles, period = 10, multiplier = 3) {
+  if (candles.length < period) return null;
+  const trueRanges = candles.map((candle, index) => {
+    if (index === 0) return candle.high - candle.low;
+    const previousClose = candles[index - 1].close;
+    return Math.max(
+      candle.high - candle.low,
+      Math.abs(candle.high - previousClose),
+      Math.abs(candle.low - previousClose),
+    );
+  });
+  let atr = trueRanges.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+  let previousUpper = (candles[period - 1].high + candles[period - 1].low) / 2 + multiplier * atr;
+  let previousLower = (candles[period - 1].high + candles[period - 1].low) / 2 - multiplier * atr;
+  let direction = 1;
+  let supertrend = previousLower;
+
+  for (let index = period; index < candles.length; index += 1) {
+    atr = (atr * (period - 1) + trueRanges[index]) / period;
+    const midpoint = (candles[index].high + candles[index].low) / 2;
+    const basicUpper = midpoint + multiplier * atr;
+    const basicLower = midpoint - multiplier * atr;
+    const upper = basicUpper < previousUpper || candles[index - 1].close > previousUpper
+      ? basicUpper
+      : previousUpper;
+    const lower = basicLower > previousLower || candles[index - 1].close < previousLower
+      ? basicLower
+      : previousLower;
+
+    if (direction === 1 && candles[index].close < lower) direction = -1;
+    else if (direction === -1 && candles[index].close > upper) direction = 1;
+
+    supertrend = direction === 1 ? lower : upper;
+    previousUpper = upper;
+    previousLower = lower;
+  }
+
+  return { value: supertrend, direction: direction === 1 ? 'Bullish' : 'Bearish' };
+}
+
+function nseDateAndMinutes(timestamp) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(timestamp * 1000)).map(({ type, value }) => [type, value]));
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+export function calculateIntradayIndicators(candles = []) {
+  const validCandles = candles
+    .filter((candle) => candle
+      && Number.isFinite(candle.timestamp)
+      && [candle.open, candle.high, candle.low, candle.close, candle.volume].every(Number.isFinite)
+      && candle.close > 0)
+    .sort((left, right) => left.timestamp - right.timestamp);
+
+  if (validCandles.length < 35) {
+    return { ready: false, reason: 'At least 35 valid 5-minute candles are required.' };
+  }
+
+  const closes = validCandles.map((candle) => candle.close);
+  const ema9 = calculateEma(closes, 9).at(-1);
+  const ema20 = calculateEma(closes, 20).at(-1);
+  const ema50 = calculateEma(closes, 50).at(-1);
+  const ema200 = calculateEma(closes, 200).at(-1);
+  const rsiSeries = calculateRsiSeries(closes);
+  const rsi = rsiSeries.at(-1);
+  const fastEma = calculateEma(closes, 12);
+  const slowEma = calculateEma(closes, 26);
+  const macdLine = fastEma.map((value, index) => (
+    value === null || slowEma[index] === null ? null : value - slowEma[index]
+  ));
+  const validMacd = macdLine.filter((value) => value !== null);
+  const signalLine = calculateEma(validMacd, 9);
+  const macd = validMacd.at(-1);
+  const macdSignal = signalLine.at(-1);
+  const adx = calculateAdx(validCandles);
+  const supertrend = calculateSupertrend(validCandles);
+
+  const latest = validCandles.at(-1);
+  const latestSession = nseDateAndMinutes(latest.timestamp);
+  const currentSessionCandles = validCandles.filter(
+    (candle) => nseDateAndMinutes(candle.timestamp).date === latestSession.date,
+  );
+  const sessionVolume = currentSessionCandles.reduce((sum, candle) => sum + candle.volume, 0);
+  const vwap = sessionVolume > 0
+    ? currentSessionCandles.reduce(
+      (sum, candle) => sum + (((candle.high + candle.low + candle.close) / 3) * candle.volume),
+      0,
+    ) / sessionVolume
+    : null;
+  const currentBucket = latestSession.minutes - (9 * 60 + 15);
+  const previousSessionVolumes = new Map();
+  for (const candle of validCandles) {
+    const local = nseDateAndMinutes(candle.timestamp);
+    if (local.date === latestSession.date || local.minutes - (9 * 60 + 15) !== currentBucket) continue;
+    previousSessionVolumes.set(local.date, candle.volume);
+  }
+  const volumeSamples = [...previousSessionVolumes.values()].filter((volume) => volume > 0);
+  const avgComparableVolume = volumeSamples.length
+    ? volumeSamples.reduce((sum, volume) => sum + volume, 0) / volumeSamples.length
+    : null;
+  const relativeVolume = avgComparableVolume && avgComparableVolume > 0
+    ? latest.volume / avgComparableVolume
+    : null;
+  const recentCandles = currentSessionCandles.slice(-12);
+  const recentHigh = Math.max(...recentCandles.map((candle) => candle.high));
+  const recentLow = Math.min(...recentCandles.map((candle) => candle.low));
+  const sideways = recentCandles.length >= 6
+    && (adx === null || adx < 20 || ((recentHigh - recentLow) / latest.close) < 0.0025);
+
+  const recentRsi = rsiSeries.slice(-14).filter((value) => value !== null);
+  const rsiMin = recentRsi.length ? Math.min(...recentRsi) : null;
+  const rsiMax = recentRsi.length ? Math.max(...recentRsi) : null;
+  const stochasticRsi = rsi !== null && rsiMin !== null && rsiMax !== null && rsiMax > rsiMin
+    ? ((rsi - rsiMin) / (rsiMax - rsiMin)) * 100
+    : null;
+
+  return {
+    ready: true,
+    candleCount: validCandles.length,
+    lastPrice: latest.close,
+    lastCandleTime: latest.timestamp,
+    sessionDate: latestSession.date,
+    vwap,
+    ema9,
+    ema20,
+    ema50,
+    ema200,
+    rsi,
+    macd,
+    macdSignal,
+    macdBullish: macd !== null && macdSignal !== null ? macd > macdSignal : null,
+    stochasticRsi,
+    adx,
+    supertrend: supertrend?.value ?? null,
+    supertrendDirection: supertrend?.direction ?? null,
+    latestVolume: latest.volume,
+    avgComparableVolume,
+    relativeVolume,
+    volumeAboveAverage: relativeVolume !== null ? relativeVolume > 1 : null,
+    sideways,
+    trend: ema9 !== null && ema20 !== null && ema50 !== null
+      ? ema9 > ema20 && ema20 > ema50 ? 'Bullish'
+        : ema9 < ema20 && ema20 < ema50 ? 'Bearish'
+          : 'Mixed'
+      : 'Insufficient history',
+  };
+}
+
+export function evaluateTechnicalSetup(indicators = {}, { marketOpen = false, dataFresh = true } = {}) {
+  if (!indicators.ready) return { setup: 'Insufficient candle data', reasons: [indicators.reason ?? 'Candle data unavailable.'] };
+  const required = [
+    ['vwap', 'VWAP (requires non-zero traded volume)'],
+    ['ema9', 'EMA 9'],
+    ['ema20', 'EMA 20'],
+    ['rsi', 'RSI'],
+    ['macdBullish', 'MACD'],
+    ['volumeAboveAverage', 'relative-volume baseline'],
+    ['adx', 'ADX'],
+  ];
+  const missing = required.filter(([field]) => indicators[field] == null).map(([, label]) => label);
+  if (missing.length) {
+    return { setup: 'Cannot assess technical setup', reasons: [`Unavailable: ${missing.join(', ')}.`] };
+  }
+  if (!marketOpen) return { setup: 'Market closed · showing previous session', reasons: [] };
+  if (!dataFresh) return { setup: 'Stale candles · no current setup', reasons: ['Latest 5-minute candle is more than 15 minutes old.'] };
+
+  const bullish = Number(indicators.lastPrice) > Number(indicators.vwap)
+    && Number(indicators.ema9) > Number(indicators.ema20)
+    && Number(indicators.rsi) >= 55
+    && Number(indicators.rsi) <= 75
+    && indicators.macdBullish === true
+    && indicators.volumeAboveAverage === true
+    && Number(indicators.adx) >= 20
+    && indicators.sideways === false;
+  const bearish = Number(indicators.lastPrice) < Number(indicators.vwap)
+    && Number(indicators.ema9) < Number(indicators.ema20)
+    && Number(indicators.rsi) >= 25
+    && Number(indicators.rsi) <= 45
+    && indicators.macdBullish === false
+    && indicators.volumeAboveAverage === true
+    && Number(indicators.adx) >= 20
+    && indicators.sideways === false;
+
+  if (bullish) {
+    return {
+      setup: 'Bullish technical setup · news confirmation required',
+      reasons: ['5-minute price, trend, momentum, ADX and relative-volume rules align.'],
+    };
+  }
+  if (bearish) {
+    return {
+      setup: 'Bearish technical setup · news confirmation required',
+      reasons: ['5-minute price, trend, momentum, ADX and relative-volume rules align.'],
+    };
+  }
+  return { setup: 'No technical setup', reasons: ['The available 5-minute technical rules are not fully aligned.'] };
+}
+
+const signalFields = [
+  ['ltp', 'last price', (value) => Number.isFinite(Number(value)) && Number(value) > 0],
+  ['vwap', 'VWAP', (value) => Number.isFinite(Number(value)) && Number(value) > 0],
+  ['ema9', 'EMA 9', (value) => Number.isFinite(Number(value)) && Number(value) > 0],
+  ['ema20', 'EMA 20', (value) => Number.isFinite(Number(value)) && Number(value) > 0],
+  ['rsi', 'RSI', (value) => Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 100],
+  ['macdBullish', 'MACD direction', (value) => typeof value === 'boolean'],
+  ['volumeAboveAverage', 'relative volume', (value) => typeof value === 'boolean'],
+  ['newsSentiment', 'verified news sentiment', (value) => ['positive', 'neutral', 'negative'].includes(value)],
+  ['adx', 'ADX', (value) => Number.isFinite(Number(value)) && Number(value) >= 0],
+  ['isSideways', 'market-structure check', (value) => typeof value === 'boolean'],
+  ['hasMajorEventRisk', 'event-risk check', (value) => typeof value === 'boolean'],
+  ['marketOpen', 'market-session status', (value) => typeof value === 'boolean'],
+  ['lastUpdateTime', 'quote timestamp', (value) => typeof value === 'string' && value.length > 0],
+];
+
+export function evaluateIntradaySignal(data = {}, { now = Date.now(), maxAgeMs = 5 * 60 * 1000 } = {}) {
+  const missingInputs = signalFields
+    .filter(([field, , isValid]) => !isValid(data[field]))
+    .map(([, label]) => label);
+
+  if (missingInputs.length) {
+    return {
+      signal: 'Awaiting verified intraday data',
+      signalType: 'neutral',
+      action: 'HOLD',
+      confidence: 0,
+      reasons: [`Required data unavailable: ${missingInputs.join(', ')}.`],
+      missingInputs,
+    };
+  }
+
+  const updatedAt = Date.parse(data.lastUpdateTime);
+  const ageMs = now - updatedAt;
+  if (!Number.isFinite(updatedAt) || ageMs < -60_000 || ageMs > maxAgeMs) {
+    return {
+      signal: 'Stale or invalid quote',
+      signalType: 'neutral',
+      action: 'HOLD',
+      confidence: 0,
+      reasons: ['Quote is invalid or older than five minutes.'],
+      missingInputs: [],
+    };
+  }
+
+  if (!data.marketOpen || !isWithinNseSession(now)) {
+    return {
+      signal: 'Market closed',
+      signalType: 'neutral',
+      action: 'HOLD',
+      confidence: 0,
+      reasons: ['Intraday signals are disabled outside the verified market session.'],
+      missingInputs: [],
+    };
+  }
+
+  const hardRiskReasons = [];
+  if (Number(data.adx) < 20) hardRiskReasons.push('ADX is below 20.');
+  if (!data.volumeAboveAverage) hardRiskReasons.push('Volume is not above average.');
+  if (data.isSideways) hardRiskReasons.push('Sideways market filter is active.');
+  if (data.hasMajorEventRisk) hardRiskReasons.push('Major event risk is active.');
+
+  if (hardRiskReasons.length) {
+    return {
+      signal: 'Risk filter blocked',
+      signalType: 'neutral',
+      action: 'HOLD',
+      confidence: 0,
+      reasons: hardRiskReasons,
+      missingInputs: [],
+    };
+  }
+
+  const bullishChecks = [
+    [Number(data.ltp) > Number(data.vwap), 'Price is not above VWAP.'],
+    [Number(data.ema9) > Number(data.ema20), 'EMA 9 is not above EMA 20.'],
+    [Number(data.rsi) >= 55 && Number(data.rsi) <= 75, 'RSI is outside the 55-75 buy range.'],
+    [data.macdBullish, 'MACD is not bullish.'],
+    [data.volumeAboveAverage, 'Volume is not above average.'],
+    [data.newsSentiment === 'positive', 'News sentiment is not positive.'],
+  ];
+  const bearishChecks = [
+    [Number(data.ltp) < Number(data.vwap), 'Price is not below VWAP.'],
+    [Number(data.ema9) < Number(data.ema20), 'EMA 9 is not below EMA 20.'],
+    [Number(data.rsi) >= 25 && Number(data.rsi) <= 45, 'RSI is outside the 25-45 sell range.'],
+    [!data.macdBullish, 'MACD is not bearish.'],
+    [data.volumeAboveAverage, 'Volume is not above average.'],
+    [data.newsSentiment === 'negative', 'News sentiment is not negative.'],
+  ];
+
+  const bullishCount = bullishChecks.filter(([passes]) => passes).length;
+  const bearishCount = bearishChecks.filter(([passes]) => passes).length;
+  const isBuy = bullishCount === bullishChecks.length;
+  const isSell = bearishCount === bearishChecks.length;
+  const confidence = Math.round((Math.max(bullishCount, bearishCount) / bullishChecks.length) * 100);
+
+  if (isBuy && confidence >= 75) {
+    return { signal: 'BUY setup confirmed', signalType: 'bullish', action: 'BUY', confidence, reasons: [], missingInputs: [] };
+  }
+  if (isSell && confidence >= 75) {
+    return { signal: 'SELL setup confirmed', signalType: 'bearish', action: 'SELL', confidence, reasons: [], missingInputs: [] };
+  }
+
+  const reasons = bullishCount >= bearishCount
+    ? bullishChecks.filter(([passes]) => !passes).map(([, reason]) => reason)
+    : bearishChecks.filter(([passes]) => !passes).map(([, reason]) => reason);
+
+  return {
+    signal: 'Rule set incomplete',
+    signalType: 'neutral',
+    action: 'HOLD',
+    confidence,
+    reasons,
+    missingInputs: [],
+  };
 }
 
 function evaluatePriceStructure(stock = {}, overrides = {}) {

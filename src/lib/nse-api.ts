@@ -56,12 +56,28 @@ export interface IndexSnapshot {
   currentPrice: number;
   percentChange: number;
   change: number;
+  open: number;
   high: number;
   low: number;
   previousClose: number;
   dayHigh: number;
   dayLow: number;
   lastUpdated: string;
+}
+
+export interface IntradayCandle {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface IntradayChart {
+  candles: IntradayCandle[];
+  quoteTime: number | null;
+  fetchedAt: string;
 }
 
 async function parseNseResponse(res: Response, label: string) {
@@ -73,71 +89,158 @@ async function parseNseResponse(res: Response, label: string) {
   return data;
 }
 
+async function fetchNseJson(url: string, label: string) {
+  const res = await fetch(url, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(12_000),
+  });
+  return parseNseResponse(res, label);
+}
+
+function getRows(data: Record<string, unknown>): unknown[] {
+  if (Array.isArray(data)) return data;
+  const candidates = [
+    (data.FOSec as Record<string, unknown> | undefined)?.data,
+    (data.NIFTY as Record<string, unknown> | undefined)?.data,
+    (data.NIFTY50 as Record<string, unknown> | undefined)?.data,
+    data.data,
+  ];
+  return (candidates.find(Array.isArray) as unknown[] | undefined) ?? [];
+}
+
+function normalizeStock(value: unknown): StockData | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const symbol = String(row.symbol ?? row.identifier ?? "").trim();
+  if (!symbol) return null;
+
+  const number = (...keys: string[]) => {
+    for (const key of keys) {
+      const parsed = Number(row[key]);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return 0;
+  };
+
+  return {
+    symbol,
+    identifier: String(row.identifier ?? symbol),
+    open_price: number("open_price", "openPrice", "open"),
+    high_price: number("high_price", "dayHigh", "high"),
+    low_price: number("low_price", "dayLow", "low"),
+    ltp: number("ltp", "lastPrice", "lastprice", "last", "currentPrice"),
+    prev_price: number("prev_price", "previousClose", "prevClose", "close"),
+    net_price: number("net_price", "change", "netPrice", "netChange"),
+    perChange: number("perChange", "pChange", "percentChange", "changePercent"),
+    trade_quantity: number("trade_quantity", "totalTradedVolume", "totalTradedQty", "volume"),
+    turnover: number("turnover", "totalTradedValue"),
+    lastUpdateTime: String(row.lastUpdateTime ?? row.lastUpdated ?? row.timestamp ?? row.time ?? ""),
+    yearHigh: number("yearHigh", "yearlyHigh"),
+    yearLow: number("yearLow", "yearlyLow"),
+    perChange30d: number("perChange30d", "perChange30D"),
+    perChange365d: number("perChange365d", "perChange365D"),
+  };
+}
+
+async function fetchMoverList(index: "gainers" | "loosers", label: string): Promise<StockData[]> {
+  const res = await fetch(`/api/nse/live-analysis-variations?index=${index}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  const data = await parseNseResponse(res, label);
+  if (!data || typeof data !== "object") return [];
+  return getRows(data as Record<string, unknown>)
+    .map(normalizeStock)
+    .filter((stock): stock is StockData => stock !== null);
+}
+
+export const fetchIntradayCharts = async (symbols: string[]): Promise<{
+  charts: Record<string, IntradayChart>;
+  errors: string[];
+}> => {
+  if (!symbols.length) return { charts: {}, errors: [] };
+  const params = new URLSearchParams({ symbols: symbols.join(",") });
+  const res = await fetch(`/api/market/intraday?${params.toString()}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  const data = await parseNseResponse(res, "intraday charts");
+  const charts: Record<string, IntradayChart> = {};
+  const failures: string[] = [];
+
+  for (const result of data.results ?? []) {
+    if (result.status === "fulfilled") {
+      charts[result.symbol] = {
+        candles: result.candles,
+        quoteTime: result.quoteTime,
+        fetchedAt: data.fetchedAt,
+      };
+    } else {
+      failures.push(`${result.symbol}: ${result.error}`);
+    }
+  }
+
+  if (failures.length && Object.keys(charts).length === 0) {
+    throw new Error(`No intraday charts could be loaded. ${failures.join("; ")}`);
+  }
+
+  return { charts, errors: failures };
+};
+
 export const fetchGainers = async (): Promise<StockData[]> => {
-  const res = await fetch("/api/nse/live-analysis-variations?index=gainers");
-  const data = await parseNseResponse(res, "gainers");
-  return data?.FOSec?.data || data?.NIFTY?.data || [];
+  return fetchMoverList("gainers", "gainers");
 };
 
 export const fetchLosers = async (): Promise<StockData[]> => {
-  const res = await fetch("/api/nse/live-analysis-variations?index=loosers");
-  const data = await parseNseResponse(res, "losers");
-  return data?.FOSec?.data || data?.NIFTY?.data || [];
+  return fetchMoverList("loosers", "losers");
 };
 
 export const fetchMarketIndices = async (): Promise<IndexSnapshot[]> => {
-  const endpoints = [
-    { name: "NIFTY 50", symbol: "NIFTY 50", url: "/api/nse/equity-stockIndices?index=NIFTY%2050" },
-    { name: "NIFTY BANK", symbol: "NIFTY BANK", url: "/api/nse/equity-stockIndices?index=NIFTY%20BANK" },
-    { name: "NIFTY IT", symbol: "NIFTY IT", url: "/api/nse/equity-stockIndices?index=NIFTY%20IT" },
-  ];
+  const data = await fetchNseJson("/api/nse/allIndices", "market indices");
+  const payload = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+  const watchedIndices = new Set(["NIFTY 50", "NIFTY BANK", "NIFTY IT"]);
 
-  const results = await Promise.allSettled(
-    endpoints.map(async ({ name, url }) => {
-      const res = await fetch(url);
-      const data = await parseNseResponse(res, `${name} index`);
-      const payload = Array.isArray(data?.data) ? data.data : Array.isArray(data?.indices) ? data.indices : [];
-      const item = payload[0] ?? {};
+  return payload.flatMap((value: unknown) => {
+    if (!value || typeof value !== "object") return [];
+    const item = value as Record<string, unknown>;
+    const name = String(item.index ?? item.name ?? "").trim().toUpperCase();
+    if (!watchedIndices.has(name)) return [];
 
-      const currentPrice = Number(item.lastPrice ?? item.lastprice ?? item.last ?? item.LTP ?? item.ltP ?? item.currentPrice ?? 0);
-      const percentChange = Number(item.pChange ?? item.perChange ?? item.percentChange ?? item.changePercent ?? 0);
-      const change = Number(item.change ?? item.netPrice ?? item.netChange ?? 0);
-      const high = Number(item.dayHigh ?? item.high ?? item.highPrice ?? 0);
-      const low = Number(item.dayLow ?? item.low ?? item.lowPrice ?? 0);
-      const previousClose = Number(item.previousClose ?? item.prevClose ?? item.close ?? 0);
-      const dayHigh = Number(item.dayHigh ?? item.high ?? item.highPrice ?? 0);
-      const dayLow = Number(item.dayLow ?? item.low ?? item.lowPrice ?? 0);
-      const lastUpdated = String(item.lastUpdated || item.updated || item.time || "");
-      const symbol = String(item.symbol ?? item.index ?? item.name ?? name);
-      const label = String(item.index ?? item.name ?? name);
+    const number = (...keys: string[]) => {
+      for (const key of keys) {
+        const parsed = Number(item[key]);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      return 0;
+    };
+    const currentPrice = number("last", "lastPrice", "lastprice", "LTP", "currentPrice");
+    if (currentPrice <= 0) return [];
 
-      return {
-        name: label,
-        symbol,
-        currentPrice,
-        percentChange,
-        change,
-        high,
-        low,
-        previousClose,
-        dayHigh,
-        dayLow,
-        lastUpdated,
-      } satisfies IndexSnapshot;
-    })
-  );
-
-  return results.flatMap((result) => (result.status === "fulfilled" && Number.isFinite(result.value.currentPrice) && result.value.currentPrice > 0 ? [result.value] : []));
+    return [{
+      name: String(item.index ?? item.name),
+      symbol: String(item.symbol ?? item.index ?? item.name),
+      currentPrice,
+      percentChange: number("percentChange", "pChange", "perChange"),
+      change: number("variation", "change", "netChange"),
+      open: number("open"),
+      high: number("high", "dayHigh"),
+      low: number("low", "dayLow"),
+      previousClose: number("previousClose", "prevClose"),
+      dayHigh: number("high", "dayHigh"),
+      dayLow: number("low", "dayLow"),
+      lastUpdated: String(item.timestamp ?? item.lastUpdated ?? item.time ?? ""),
+    } satisfies IndexSnapshot];
+  });
 };
 
 export const fetchOISpurtsUnderlyings = async (): Promise<OISpurtData[]> => {
-  const res = await fetch("/api/nse/live-analysis-oi-spurts-underlyings");
+  const res = await fetch("/api/nse/live-analysis-oi-spurts-underlyings", { cache: "no-store" });
   const data = await parseNseResponse(res, "OI spurts underlyings");
   return data.data || [];
 };
 
 export const fetchOISpurtsContracts = async (): Promise<OISpurtData[]> => {
-  const res = await fetch("/api/nse/live-analysis-oi-spurts-contracts");
+  const res = await fetch("/api/nse/live-analysis-oi-spurts-contracts", { cache: "no-store" });
   const data = await parseNseResponse(res, "OI spurts contracts");
   
   if (!data?.data) return [];
@@ -157,13 +260,13 @@ export const fetchOISpurtsContracts = async (): Promise<OISpurtData[]> => {
 };
 
 export const fetchCorporateActions = async (): Promise<CorporateAction[]> => {
-  const res = await fetch("/api/nse/corporates-corporateActions?index=equities");
+  const res = await fetch("/api/nse/corporates-corporateActions?index=equities", { cache: "no-store" });
   const data = await parseNseResponse(res, "corporate actions");
   return data || [];
 };
 
 export const fetchFinancialEvents = async (): Promise<FinancialEvent[]> => {
-  const res = await fetch("/api/nse/event-calendar");
+  const res = await fetch("/api/nse/event-calendar", { cache: "no-store" });
   const data = await parseNseResponse(res, "financial events");
   return data || [];
 };

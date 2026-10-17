@@ -2,7 +2,7 @@
 
 import { OISpurtData } from "@/lib/nse-api";
 import { cn, formatNumber, formatCompactNumber } from "@/lib/utils";
-import { Zap, Rocket, ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
+import { Rocket, ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -12,7 +12,7 @@ interface OIAnalyzerProps {
   isLoading?: boolean;
 }
 
-export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProps) {
+export function OIAnalyzer({ underlyings, contracts }: OIAnalyzerProps) {
   const [activeTab, setActiveTab] = useState<"underlyings" | "contracts">("underlyings");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -30,31 +30,6 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
     if (oiChange < 0 && priceChange > 0) return { label: "Short Covering", color: "text-sky-400", bg: "bg-sky-400/10", type: "bullish" };
     if (oiChange < 0 && priceChange < 0) return { label: "Long Unwinding", color: "text-orange-400", bg: "bg-orange-400/10", type: "bearish" };
     return { label: "Neutral", color: "text-white/40", bg: "bg-white/5", type: "neutral" };
-  };
-
-  const getProbabilityAndAction = (oiChange: number, priceChange: number) => {
-    const absPrice = Math.abs(priceChange);
-    const absOI = Math.abs(oiChange);
-    
-    // Scale conviction based on change magnitude
-    const priceFactor = Math.min(absPrice * 5, 20); // max 20%
-    const oiFactor = Math.min(absOI * 2, 20); // max 20%
-    const baseScore = 55 + priceFactor + oiFactor;
-    const probability = Math.round(Math.min(baseScore, 95));
-
-    if (oiChange > 0 && priceChange > 0) {
-      return { action: "BUY", probability }; // Long Build-up
-    }
-    if (oiChange > 0 && priceChange < 0) {
-      return { action: "SELL", probability }; // Short Build-up
-    }
-    if (oiChange < 0 && priceChange > 0) {
-      return { action: "BUY", probability: Math.max(50, probability - 10) }; // Short Covering
-    }
-    if (oiChange < 0 && priceChange < 0) {
-      return { action: "SELL", probability: Math.max(50, probability - 10) }; // Long Unwinding
-    }
-    return { action: "HOLD", probability: 50 };
   };
 
   return (
@@ -99,6 +74,7 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
           <span className="flex items-center gap-1"><div className="h-1.5 w-1.5 rounded-full bg-rose-400" /> OI ↑ Price ↓ = Short Build-Up</span>
           <span className="flex items-center gap-1"><div className="h-1.5 w-1.5 rounded-full bg-sky-400" /> OI ↓ Price ↑ = Short Covering</span>
         </div>
+        <span className="ml-auto">Positioning context only; not a trade signal.</span>
       </div>
 
       <div className="overflow-auto custom-scrollbar flex-1 max-h-[600px]">
@@ -109,7 +85,7 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">OI Change %</th>
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">Price Chg %</th>
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">LTP</th>
-              <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-center">Signal & Action</th>
+              <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-center">OI / Price Pattern</th>
               <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest text-right">Volume</th>
             </tr>
           </thead>
@@ -119,7 +95,6 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
                 const oiChange = item.pChangeInOI ?? item.avgInOI ?? 0;
                 const priceChange = item.pChange ?? 0;
                 const signal = getMomentumSignal(oiChange, priceChange);
-                const actionData = getProbabilityAndAction(oiChange, priceChange);
                 const isSpurt = oiChange > 7;
                 
                 return (
@@ -146,7 +121,7 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
                             <span className="flex items-center gap-1 bg-amber-500/20 text-amber-500 text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border border-amber-500/20 shadow-lg shadow-amber-500/10">
                               <Rocket className="h-2.5 w-2.5" /> OI SPURT
                             </span>
-                            {signal.type === "bullish" && <span className="bg-emerald-500/20 text-emerald-400 text-[9px] font-black px-1.5 py-0.5 rounded tracking-tighter uppercase">Smart Money In</span>}
+                            {signal.type === "bullish" && <span className="bg-emerald-500/20 text-emerald-400 text-[9px] font-black px-1.5 py-0.5 rounded tracking-tighter uppercase">Price + OI rising</span>}
                           </div>
                         )}
                       </div>
@@ -166,19 +141,9 @@ export function OIAnalyzer({ underlyings, contracts, isLoading }: OIAnalyzerProp
                           "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
                           signal.bg, signal.color
                         )}>
-                          {signal.type === "bullish" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                          {signal.type === "bullish" ? <ArrowUpRight className="h-3 w-3" /> : signal.type === "bearish" ? <ArrowDownRight className="h-3 w-3" /> : <Info className="h-3 w-3" />}
                           {signal.label}
                         </span>
-                        {actionData.action !== "HOLD" && (
-                          <span className={cn(
-                            "font-black text-[11px] flex items-center gap-1.5 whitespace-nowrap",
-                            actionData.action === "BUY" ? "text-emerald-400" : "text-rose-400"
-                          )}>
-                            {actionData.action === "BUY" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />}
-                            {actionData.action === "SELL" && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />}
-                            {actionData.action} ({actionData.probability}%)
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-5 text-right text-sm text-muted-foreground">

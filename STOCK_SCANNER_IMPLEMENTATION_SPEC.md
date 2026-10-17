@@ -10,6 +10,16 @@ Core mission:
 - provide actionable scoring and probability
 - support intraday and swing-timeframe strategies
 
+## Signal safety and current feed coverage
+
+The current NSE integration supplies index snapshots from `/api/allIndices`, top movers, OI-spurt snapshots, corporate actions, and an event calendar. Fetch requests bypass caches, each feed is handled independently, and an unavailable feed must not hide successful market snapshots. Show the time the app fetched data separately from the exchange quote timestamp; do not claim tick-level real-time data when NSE does not include a source timestamp. The integration does not supply the intraday candles, indicator values, relative-volume baseline, verified news sentiment, major-event risk status, or full option-chain data required by the requested trading rules. Do not infer those values from daily price changes, absolute share volume, or an OI-spurt snapshot.
+
+The scanner also supports an explicitly unofficial Yahoo Finance chart fallback through `/api/market/intraday`, requesting 5-minute candles and refreshing approximately once per minute during NSE market hours. Yahoo data is not a licensed or guaranteed real-time feed and can be delayed, throttled, or unavailable. The scanner labels its source and candle timestamp, rejects candles older than 15 minutes for active technical setups, and never equates a technical candidate with a verified BUY/SELL signal. Calculated indicators include EMA 9/20/50/200, session VWAP, Supertrend, RSI, MACD direction, ADX, Stochastic RSI, and comparable-time relative volume. NIFTY 50 index candles report zero volume, so VWAP and volume confirmation are unavailable for the index; do not substitute ETF volume.
+
+The intraday signal engine must fail closed: emit BUY or SELL only when all six direction-specific rules pass, ADX is at least 20, volume is above its average, the market is not sideways, no major event risk is present, and the quote is no more than five minutes old during market hours. Missing, stale, or blocked inputs produce HOLD. The displayed rule-match score measures satisfied rules only; it is not a win probability or an accuracy guarantee.
+
+NIFTY 50 may show a separate informational snapshot bias when its NSE snapshot aligns above/below the open and previous close and in the upper/lower portion of the session range. This limited bias is not a BUY/SELL trade signal and must be labeled as a last-session snapshot when the market is closed. Stock rows without the required intraday feed should say they cannot be scored rather than repeating HOLD as if an evaluated setup were available.
+
 ---
 
 ## 2. Target Users

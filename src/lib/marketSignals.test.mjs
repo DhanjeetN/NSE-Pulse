@@ -1,45 +1,206 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  calculateSignalAndProbability,
+  evaluateIndexSnapshotBias,
+  evaluateIntradaySignal,
+  calculateIntradayIndicators,
+  evaluateTechnicalSetup,
   buildMarketPulse,
   buildForwardQuantModel,
   buildVolatilityAdjustedForecast,
   buildPredictionHistorySummary,
 } from './marketSignals.js';
 
-test('strong bull setup returns BUY with high probability', () => {
-  const result = calculateSignalAndProbability({
+const signalTime = Date.parse('2026-10-16T10:00:00.000Z');
+const validSignalData = {
+  ltp: 101,
+  vwap: 100,
+  ema9: 100.5,
+  ema20: 100,
+  rsi: 65,
+  macdBullish: true,
+  volumeAboveAverage: true,
+  newsSentiment: 'positive',
+  adx: 25,
+  isSideways: false,
+  hasMajorEventRisk: false,
+  marketOpen: true,
+  lastUpdateTime: new Date(signalTime).toISOString(),
+};
+
+function makeIntradayCandles({ zeroVolume = false } = {}) {
+  const firstSession = Date.parse('2026-10-12T03:45:00.000Z') / 1000;
+  return Array.from({ length: 80 }, (_, index) => {
+    const session = Math.floor(index / 40);
+    const slot = index % 40;
+    const timestamp = firstSession + session * 24 * 60 * 60 + slot * 5 * 60;
+    const close = 100 + index * 0.2;
+    return {
+      timestamp,
+      open: close - 0.1,
+      high: close + 0.2,
+      low: close - 0.2,
+      close,
+      volume: zeroVolume ? 0 : index === 79 ? 4000 : 1000,
+    };
+  });
+}
+
+test('5-minute indicator calculation returns current-session VWAP and comparable relative volume', () => {
+  const indicators = calculateIntradayIndicators(makeIntradayCandles());
+
+  assert.equal(indicators.ready, true);
+  assert.ok(indicators.ema9 > indicators.ema20);
+  assert.ok(indicators.ema50 > 0);
+  assert.equal(indicators.ema200, null);
+  assert.ok(indicators.supertrend > 0);
+  assert.equal(indicators.supertrendDirection, 'Bullish');
+  assert.ok(indicators.vwap > 0);
+  assert.equal(indicators.relativeVolume, 4);
+  assert.equal(indicators.volumeAboveAverage, true);
+  assert.ok(indicators.adx >= 20);
+});
+
+test('zero-volume index candles cannot fabricate VWAP, relative volume, or a technical setup', () => {
+  const indicators = calculateIntradayIndicators(makeIntradayCandles({ zeroVolume: true }));
+  const setup = evaluateTechnicalSetup(indicators, { marketOpen: true });
+
+  assert.equal(indicators.vwap, null);
+  assert.equal(indicators.relativeVolume, null);
+  assert.equal(setup.setup, 'Cannot assess technical setup');
+  assert.match(setup.reasons[0], /VWAP/);
+  assert.match(setup.reasons[0], /relative-volume baseline/);
+});
+
+test('stale Yahoo candles cannot be presented as an active setup during market hours', () => {
+  const indicators = calculateIntradayIndicators(makeIntradayCandles());
+  const setup = evaluateTechnicalSetup(indicators, { marketOpen: true, dataFresh: false });
+
+  assert.equal(setup.setup, 'Stale candles · no current setup');
+});
+
+test('closed-market technical setup is clearly labeled as previous-session data', () => {
+  const indicators = calculateIntradayIndicators(makeIntradayCandles());
+  const setup = evaluateTechnicalSetup(indicators, { marketOpen: false });
+
+  assert.equal(setup.setup, 'Market closed · showing previous session');
+});
+
+test('NIFTY 50 snapshot bias is bullish only when price, previous close, and range position align', () => {
+  const result = evaluateIndexSnapshotBias({
+    currentPrice: 102,
+    open: 100,
+    high: 103,
+    low: 99,
+    previousClose: 99.5,
+    percentChange: 2.5,
+  }, { now: Date.parse('2026-10-16T05:00:00.000Z') });
+
+  assert.equal(result.bias, 'Bullish bias');
+  assert.equal(result.marketStatus, 'Market open');
+  assert.match(result.reasons[0], /upper part/);
+});
+
+test('NIFTY 50 snapshot bias identifies aligned bearish movement', () => {
+  const result = evaluateIndexSnapshotBias({
+    currentPrice: 98,
+    open: 100,
+    high: 101,
+    low: 97,
+    previousClose: 100.5,
+    percentChange: -2.5,
+  }, { now: Date.parse('2026-10-16T05:00:00.000Z') });
+
+  assert.equal(result.bias, 'Bearish bias');
+});
+
+test('mixed NIFTY 50 snapshot never invents a directional bias and closed markets are labeled', () => {
+  const result = evaluateIndexSnapshotBias({
+    currentPrice: 100,
+    open: 99,
+    high: 101,
+    low: 98,
+    previousClose: 100,
+    percentChange: 0,
+  }, { now: Date.parse('2026-10-17T04:30:00.000Z') });
+
+  assert.equal(result.bias, 'Mixed / no bias');
+  assert.equal(result.marketStatus, 'Market closed · last snapshot');
+});
+
+test('daily mover data without verified intraday indicators never produces a trade signal', () => {
+  const result = evaluateIntradaySignal({
     symbol: 'RELIANCE',
     ltp: 3010,
-    high_price: 3025,
-    low_price: 2965,
-    yearHigh: 3150,
-    yearLow: 2200,
     perChange: 2.8,
     trade_quantity: 250000,
-  }, 'gainer', 'CALL SIDE');
+  }, { now: signalTime });
+
+  assert.equal(result.action, 'HOLD');
+  assert.equal(result.confidence, 0);
+  assert.ok(result.missingInputs.includes('VWAP'));
+  assert.ok(result.missingInputs.includes('verified news sentiment'));
+});
+
+test('fully confirmed bullish rules produce a BUY with at least 75% rule match', () => {
+  const result = evaluateIntradaySignal(validSignalData, { now: signalTime });
 
   assert.equal(result.action, 'BUY');
-  assert.ok(result.probability >= 60);
+  assert.equal(result.confidence, 100);
   assert.equal(result.signalType, 'bullish');
 });
 
-test('strong bear setup returns SELL with strong risk-off conviction', () => {
-  const result = calculateSignalAndProbability({
-    symbol: 'TCS',
-    ltp: 3800,
-    high_price: 3890,
-    low_price: 3825,
-    yearHigh: 4200,
-    yearLow: 3400,
-    perChange: -3.1,
-    trade_quantity: 210000,
-  }, 'loser', 'PUT SIDE');
+test('fully confirmed bearish rules produce a SELL', () => {
+  const result = evaluateIntradaySignal({
+    ...validSignalData,
+    ltp: 99,
+    ema9: 99.5,
+    ema20: 100,
+    rsi: 35,
+    macdBullish: false,
+    newsSentiment: 'negative',
+  }, { now: signalTime });
 
   assert.equal(result.action, 'SELL');
-  assert.ok(result.probability >= 60);
+  assert.equal(result.confidence, 100);
   assert.equal(result.signalType, 'bearish');
+});
+
+test('a rule-match score above 75% is not enough when any required directional rule fails', () => {
+  const result = evaluateIntradaySignal({
+    ...validSignalData,
+    newsSentiment: 'neutral',
+  }, { now: signalTime });
+
+  assert.equal(result.action, 'HOLD');
+  assert.equal(result.confidence, 83);
+  assert.ok(result.reasons.some((reason) => reason.includes('News sentiment')));
+});
+
+test('risk filters block otherwise valid setups', async (t) => {
+  const blockedInputs = [
+    ['ADX below 20', { adx: 19 }],
+    ['low volume', { volumeAboveAverage: false }],
+    ['sideways market', { isSideways: true }],
+    ['major event risk', { hasMajorEventRisk: true }],
+    ['market closed', { marketOpen: false }],
+    ['stale quote', { lastUpdateTime: new Date(signalTime - 6 * 60 * 1000).toISOString() }],
+    ['weekend despite a provider claiming the market is open', {
+      marketOpen: true,
+      lastUpdateTime: '2026-10-17T04:30:00.000Z',
+    }, Date.parse('2026-10-17T04:30:00.000Z')],
+  ];
+
+  for (const [name, override, now = signalTime] of blockedInputs) {
+    await t.test(name, () => {
+      const result = evaluateIntradaySignal(
+        { ...validSignalData, ...override },
+        { now },
+      );
+      assert.equal(result.action, 'HOLD');
+      assert.equal(result.confidence, 0);
+    });
+  }
 });
 
 test('forward quant model predicts bullish breakout probability before the breakout occurs', () => {
@@ -125,10 +286,11 @@ test('market pulse summarises a balanced regime correctly', () => {
 });
 
 test('historical forecast summary computes actual outcomes from stored prediction records', () => {
+  const timestampDaysAgo = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const summary = buildPredictionHistorySummary([
     {
       id: '1',
-      timestamp: '2026-10-15T09:30:00.000Z',
+      timestamp: timestampDaysAgo(0),
       timeframe: '1H',
       marketCondition: 'Bullish',
       bullish: 68,
@@ -143,7 +305,7 @@ test('historical forecast summary computes actual outcomes from stored predictio
     },
     {
       id: '2',
-      timestamp: '2026-10-14T09:30:00.000Z',
+      timestamp: timestampDaysAgo(1),
       timeframe: '15M',
       marketCondition: 'Bearish',
       bullish: 41,
@@ -158,7 +320,7 @@ test('historical forecast summary computes actual outcomes from stored predictio
     },
     {
       id: '3',
-      timestamp: '2026-10-13T09:30:00.000Z',
+      timestamp: timestampDaysAgo(2),
       timeframe: '30M',
       marketCondition: 'Bullish',
       bullish: 56,

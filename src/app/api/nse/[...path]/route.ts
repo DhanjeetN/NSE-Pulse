@@ -32,7 +32,9 @@ export async function GET(
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: { "Cache-Control": "no-store, max-age=0" },
+    });
   } catch (error: unknown) {
     console.error("NSE Proxy Gateway Error:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch NSE data";

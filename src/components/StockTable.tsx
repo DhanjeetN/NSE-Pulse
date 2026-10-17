@@ -1,11 +1,10 @@
 "use client";
 
 import { StockData } from "@/lib/nse-api";
-import { calculateSignalAndProbability } from "@/lib/marketSignals";
+import { evaluateIntradaySignal } from "@/lib/marketSignals";
 import { cn, formatNumber, formatCompactNumber } from "@/lib/utils";
-import { format } from "date-fns";
-import { TrendingUp, TrendingDown, ExternalLink, Search, RefreshCw, Calendar, CircleDollarSign, Flame, Info, MessageSquare } from "lucide-react";
-import { useState, useMemo } from "react";
+import { TrendingUp, TrendingDown, ExternalLink, Search, Calendar, CircleDollarSign } from "lucide-react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMarketStore } from "@/store/useStore";
 
@@ -16,7 +15,7 @@ interface StockTableProps {
 }
 
 export function StockTable({ data, type, isLoading }: StockTableProps) {
-  const { corporateActions, financialEvents, oiContracts } = useMarketStore();
+  const { corporateActions, financialEvents } = useMarketStore();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<keyof StockData>("perChange");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(type === "gainer" ? "desc" : "asc");
@@ -70,41 +69,19 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("ltp")}>LTP & Range</th>
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("perChange")}>% Chg</th>
               <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("trade_quantity")}>Volume</th>
-              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Analysis & Sentiment</th>
-              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Signal & Conviction</th>
+              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Events & Actions</th>
+              <th className="px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Intraday Signal & Rule Match</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             <AnimatePresence mode="popLayout">
               {filteredData.map((stock) => {
-                const isMomentum = type === "gainer" ? stock.perChange > 2 : stock.perChange < -2;
+                const isLargeDailyMove = Math.abs(stock.perChange) > 2;
                 const trendColor = stock.perChange >= 0 ? "text-emerald-400" : "text-rose-400";
-                
-                // Analysis Logic
                 const action = corporateActions.find(a => a.symbol === stock.symbol);
                 const event = financialEvents.find(e => e.symbol === stock.symbol);
-                
-                // Sentiment Logic
-                const isBullishAction = action?.subject.toLowerCase().match(/dividend|split|bonus|buy back/);
-                
-                // Better Result Logic
-                const todayStr = format(new Date(), "dd-MMM-yyyy");
-                const isResultToday = event?.date === todayStr;
-                const isUpcomingResult = event && !isResultToday;
-                
-                const resultStatus = isResultToday ? (stock.perChange > 1 ? "GOOD" : stock.perChange < -1 ? "BAD" : "NEUTRAL") : null;
-                
-                // Compact date formatting
                 const compactDate = event ? event.date.split('-').slice(0, 2).join(' ') : null;
-                const upcomingResultText = isUpcomingResult ? `RES: ${compactDate}` : null;
-                
-                // OI Bias Logic
-                const contract = oiContracts.find(c => c.symbol === stock.symbol);
-                const callPutBias = contract ? (contract.pChange && contract.pChange > 0 ? "CALL SIDE" : "PUT SIDE") : null;
-                const isHighVolume = stock.perChange > 1.5 && stock.trade_quantity > 100000;
-
-                // Calculate breakout signal and probability metrics
-                const signalData = calculateSignalAndProbability(stock, type, callPutBias);
+                const signalData = evaluateIntradaySignal(stock);
                 
                 return (
                   <motion.tr
@@ -115,7 +92,7 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                     exit={{ opacity: 0, scale: 0.95 }}
                     className={cn(
                       "group hover:bg-muted/50 transition-colors cursor-pointer",
-                      isMomentum && (type === "gainer" ? "bg-emerald-500/5 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]" : "bg-rose-500/5 shadow-[inset_0_0_20px_rgba(244,63,94,0.05)]")
+                      isLargeDailyMove && (stock.perChange > 0 ? "bg-emerald-500/5 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]" : "bg-rose-500/5 shadow-[inset_0_0_20px_rgba(244,63,94,0.05)]")
                     )}
                     onClick={() => openChart(stock.symbol)}
                   >
@@ -125,12 +102,12 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                           {stock.symbol}
                           <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </span>
-                        {isMomentum && (
+                        {isLargeDailyMove && (
                           <span className={cn(
                             "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded w-fit mt-1",
-                            type === "gainer" ? "bg-emerald-500/20 text-emerald-400 animate-pulse" : "bg-rose-500/20 text-rose-400 animate-pulse"
+                            stock.perChange > 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
                           )}>
-                            {type === "gainer" ? "🔥 Momentum" : "⚠ Strong Selling"}
+                            {stock.perChange > 0 ? "Large daily rise" : "Large daily fall"}
                           </span>
                         )}
                       </div>
@@ -152,33 +129,16 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                     <td className="px-4 py-4 text-right text-sm text-muted-foreground">
                       <div className="flex flex-col items-end">
                         <span>{formatCompactNumber(stock.trade_quantity)}</span>
-                        {isHighVolume && (
-                          <span className="text-[9px] text-amber-500 font-bold flex items-center gap-1">
-                            <Flame className="h-2 w-2" /> HIGH VOL
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-4 text-right">
                       <div className="flex flex-col items-end gap-1">
-                        {resultStatus && (
-                          <span 
-                            onClick={(e) => openResults(e, stock.symbol)}
-                            className={cn(
-                              "text-[9px] font-black px-1.5 py-0.5 rounded cursor-pointer hover:brightness-110",
-                              resultStatus === "GOOD" ? "bg-emerald-500/20 text-emerald-400" : 
-                              resultStatus === "BAD" ? "bg-rose-500/20 text-rose-400" : "bg-muted text-muted-foreground"
-                            )}
-                          >
-                            {resultStatus} RESULT
-                          </span>
-                        )}
-                        {upcomingResultText && (
+                        {event && (
                           <span 
                             onClick={(e) => openResults(e, stock.symbol)}
                             className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 flex items-center gap-1 cursor-pointer hover:bg-blue-500/20 transition-colors"
                           >
-                            <Calendar className="h-2 w-2" /> {upcomingResultText}
+                            <Calendar className="h-2 w-2" /> EVENT: {compactDate}
                           </span>
                         )}
                         {action && (
@@ -189,18 +149,10 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                             <span className="text-[9px] text-muted-foreground font-mono">Ex: {action.exDate}</span>
                           </div>
                         )}
-                        {callPutBias && (
-                          <span className={cn(
-                            "text-[8px] font-bold tracking-tighter",
-                            callPutBias === "CALL SIDE" ? "text-emerald-500" : "text-rose-500"
-                          )}>
-                            {callPutBias} BIAS
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-4 text-right text-xs">
-                      <div className="flex flex-col items-end gap-1.5">
+                      <div className="flex flex-col items-end gap-1.5" title={signalData.reasons.join(" ")}>
                         <span className={cn(
                           "px-2 py-0.5 rounded-md font-bold text-[9px] tracking-wider uppercase border shadow-sm whitespace-nowrap",
                           signalData.signalType === "bullish" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
@@ -215,10 +167,15 @@ export function StockTable({ data, type, isLoading }: StockTableProps) {
                           signalData.action === "SELL" ? "text-rose-400" :
                           "text-muted-foreground/60"
                         )}>
-                          {signalData.action === "BUY" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />}
-                          {signalData.action === "SELL" && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />}
-                          {signalData.action} {signalData.action !== "HOLD" ? `(${signalData.probability}%)` : ""}
+                          {signalData.action} ({signalData.confidence}% rule match)
                         </span>
+                        {signalData.reasons.length > 0 && (
+                          <span className="max-w-52 text-[9px] text-muted-foreground" title={signalData.reasons.join(" ")}>
+                            {signalData.missingInputs.length > 0
+                              ? `Missing ${signalData.missingInputs.slice(0, 3).join(", ")}${signalData.missingInputs.length > 3 ? ", ..." : ""}`
+                              : signalData.reasons[0]}
+                          </span>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
